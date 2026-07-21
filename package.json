@@ -1,0 +1,27 @@
+{
+    "name": "voxa",
+    "module": "index.ts",
+    "type": "module",
+    "private": true,
+    "main": "src/index.ts",
+    "scripts": {
+        "test": "bun test",
+        "check": "biome check src tests",
+        "format": "biome format --write src tests",
+        "lint": "biome lint --write src tests"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "latest",
+        "@types/bun": "latest"
+    },
+    "peerDependencies": {
+        "discord.js": "^14.27.0",
+        "typescript": "^5"
+    },
+    "dependencies": {
+        "chrono-node": "^2.10.1",
+        "fastest-levenshtein": "^1.0.16",
+        "moment-timezone": "^0.6.3",
+        "zod": "^4.4.3"
+    }
+}
