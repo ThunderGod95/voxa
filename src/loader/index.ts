@@ -1,8 +1,8 @@
-import type { RESTPostAPIApplicationCommandsJSONBody } from "discord.js";
 import {
     type CommandHandlerConfig,
     CommandManager,
-    createSlashCommandBuilders,
+    createSlashCommandPayloads,
+    type SlashCommandPayload,
 } from "../manager";
 import { resolveCommandModules } from "./commandResolver";
 import { loadModules } from "./moduleLoader";
@@ -19,15 +19,25 @@ export interface CommandLoaderConfig extends CommandHandlerConfig {
 
 export interface CommandLoaderResult {
     manager: CommandManager;
-    restPayloads: RESTPostAPIApplicationCommandsJSONBody[];
+    /** Slash-command manifest ready for Discord registration. */
+    slashCommandPayloads: SlashCommandPayload[];
+
+    /** @deprecated Use `slashCommandPayloads` instead. */
+    restPayloads: SlashCommandPayload[];
 
     diagnostics: {
         loadedCount: number;
         groupCount: number;
         skippedCount: number;
         failedCount: number;
-        skipped: { file: string; reason: string }[];
-        failed: { file: string; error: string }[];
+        skipped: {
+            file: string;
+            reason: string;
+        }[];
+        failed: {
+            file: string;
+            error: string;
+        }[];
     };
 }
 
@@ -56,9 +66,7 @@ export async function loadCommands(
 
     manager.registerCommandRoutes(resolved.routes);
 
-    const restPayloads = createSlashCommandBuilders(resolved.routes).map(
-        (builder) => builder.toJSON(),
-    );
+    const slashCommandPayloads = createSlashCommandPayloads(resolved.routes);
 
     const groupCount = new Set(
         resolved.routes.flatMap((route) =>
@@ -70,7 +78,8 @@ export async function loadCommands(
 
     return {
         manager,
-        restPayloads,
+        slashCommandPayloads,
+        restPayloads: slashCommandPayloads,
 
         diagnostics: {
             loadedCount: resolved.routes.length,
