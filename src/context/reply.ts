@@ -1,47 +1,27 @@
 import type {
-    APIContainerComponent,
     APIEmbed,
-    APIFileComponent,
-    APIMediaGalleryComponent,
-    APISectionComponent,
-    APISeparatorComponent,
-    APITextDisplayComponent,
-    ContainerComponentData,
-    FileComponentData,
     InteractionEditReplyOptions,
     InteractionReplyOptions,
     JSONEncodable,
-    MediaGalleryComponentData,
     MessageEditOptions,
     MessageMentionOptions,
     MessageReplyOptions,
-    SectionComponentData,
-    SeparatorComponentData,
-    TextDisplayComponentData,
 } from "discord.js";
 import { MessageFlags } from "discord.js";
 
-type ComponentV2 =
-    | APIContainerComponent
-    | APIFileComponent
-    | APIMediaGalleryComponent
-    | APISectionComponent
-    | APISeparatorComponent
-    | APITextDisplayComponent
-    | ContainerComponentData
-    | FileComponentData
-    | MediaGalleryComponentData
-    | SectionComponentData
-    | SeparatorComponentData
-    | TextDisplayComponentData
-    | JSONEncodable<
-          | APIContainerComponent
-          | APIFileComponent
-          | APIMediaGalleryComponent
-          | APISectionComponent
-          | APISeparatorComponent
-          | APITextDisplayComponent
-      >;
+/**
+ * Any top-level message component accepted by Discord.js.
+ */
+export type CommandReplyComponent = NonNullable<
+    InteractionReplyOptions["components"]
+>[number];
+
+/**
+ * Any uploaded file accepted by Discord.js interaction replies.
+ */
+export type CommandReplyFile = NonNullable<
+    InteractionReplyOptions["files"]
+>[number];
 
 interface BaseReplyOptions {
     /**
@@ -53,6 +33,14 @@ interface BaseReplyOptions {
 
     /** Controls which mentions are permitted to ping users or roles. */
     mentions?: MessageMentionOptions;
+
+    /**
+     * Files uploaded with the reply.
+     *
+     * File components reference these uploads through
+     * `attachment://<filename>` URLs.
+     */
+    files?: readonly CommandReplyFile[];
 }
 
 /**
@@ -74,7 +62,7 @@ export interface TraditionalReplyOptions extends BaseReplyOptions {
 export interface ComponentV2ReplyOptions extends BaseReplyOptions {
     content?: never;
     embeds?: never;
-    components: readonly ComponentV2[];
+    components: readonly CommandReplyComponent[];
 }
 
 export type CommandReplyOptions =

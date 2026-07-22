@@ -1,8 +1,5 @@
-import {
-    ContainerBuilder,
-    type RGBTuple,
-    TextDisplayBuilder,
-} from "discord.js";
+import type { RGBTuple } from "discord.js";
+import { container } from "../components";
 import type { CommandReplyPayload } from "./reply";
 
 export interface CommandFeedbackRenderer {
@@ -30,16 +27,12 @@ export function createComponentFeedbackRenderer(
         prefix: string,
         accentColor: number | RGBTuple,
     ): CommandReplyPayload {
-        const container = new ContainerBuilder()
-            .setAccentColor(accentColor)
-            .addTextDisplayComponents(
-                new TextDisplayBuilder({
-                    content: `${prefix} ${message}`,
-                }),
-            );
+        const view = container()
+            .accentColor(accentColor)
+            .text(`${prefix} ${message}`);
 
         return {
-            components: [container],
+            components: [view],
         };
     }
 
