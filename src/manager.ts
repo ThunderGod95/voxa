@@ -1,457 +1,935 @@
 import { EventEmitter } from "node:events";
 import {
-    type ChatInputCommandInteraction,
-    Collection,
-    InteractionContextType,
-    type Message,
-    type PermissionResolvable,
-    PermissionsBitField,
-    SlashCommandBuilder,
+	type ChatInputCommandInteraction,
+	Collection,
+	InteractionContextType,
+	type Message,
+	type PermissionResolvable,
+	PermissionsBitField,
+	SlashCommandBuilder,
+	type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import {
-    CommandContext,
-    type CommandFeedbackRenderer,
-    type CommandLogger,
-    defaultCommandFeedbackRenderer,
-    defaultCommandLogger,
-} from "@/context";
-import {
-    type ArgumentSchema,
-    addArgumentsToSlashCommand,
-    formatArgumentUsage,
-    type ParsedArguments,
-    parseInteractionArguments,
-    parseMessageArguments,
-    tokenizeArguments,
-    validateArgumentSchema,
+	type ArgumentSchema,
+	addArgumentsToSlashCommand,
+	formatArgumentUsage,
+	type ParsedArguments,
+	parseInteractionArguments,
+	parseMessageArguments,
+	tokenizeArguments,
+	validateArgumentSchema,
 } from "./arguments";
+import {
+	CommandContext,
+	type CommandFeedbackRenderer,
+	type CommandLogger,
+	defaultCommandFeedbackRenderer,
+	defaultCommandLogger,
+} from "./context";
 
 const EMPTY_ARGUMENTS = {} as const satisfies ArgumentSchema;
+const COMMAND_NAME_PATTERN = /^[a-z0-9_-]{1,32}$/u;
 
-export interface Command<
-    Schema extends ArgumentSchema = typeof EMPTY_ARGUMENTS,
+export interface CommandDefinition<
+	Schema extends ArgumentSchema = typeof EMPTY_ARGUMENTS,
 > {
-    name: string;
-    description: string;
+	/**
+	 * Directory-loaded commands may omit the name. In that case, the loader
+	 * derives it from the filename.
+	 */
+	name?: string;
 
-    aliases?: readonly string[];
-    arguments?: Schema;
+	description: string;
+	aliases?: readonly string[];
+	arguments?: Schema;
 
-    slash?: boolean;
-    guildOnly?: boolean;
+	slash?: boolean;
+	guildOnly?: boolean;
 
-    userPermissions?: readonly PermissionResolvable[];
-    botPermissions?: readonly PermissionResolvable[];
+	userPermissions?: readonly PermissionResolvable[];
+	botPermissions?: readonly PermissionResolvable[];
 
-    execute(ctx: CommandContext<ParsedArguments<Schema>>): Promise<void> | void;
+	execute(ctx: CommandContext<ParsedArguments<Schema>>): Promise<void> | void;
 }
 
+export type Command<Schema extends ArgumentSchema = typeof EMPTY_ARGUMENTS> =
+	CommandDefinition<Schema> & {
+		name: string;
+	};
+
 export type AnyCommand = Command<ArgumentSchema>;
+export type AnyCommandDefinition = CommandDefinition<ArgumentSchema>;
 
 export function defineCommand<
-    const Schema extends ArgumentSchema = typeof EMPTY_ARGUMENTS,
->(command: Command<Schema>): Command<Schema> {
-    return command;
+	const Schema extends ArgumentSchema = typeof EMPTY_ARGUMENTS,
+>(command: Command<Schema>): Command<Schema>;
+
+export function defineCommand<
+	const Schema extends ArgumentSchema = typeof EMPTY_ARGUMENTS,
+>(command: CommandDefinition<Schema>): CommandDefinition<Schema>;
+
+export function defineCommand<
+	const Schema extends ArgumentSchema = typeof EMPTY_ARGUMENTS,
+>(command: CommandDefinition<Schema>): CommandDefinition<Schema> {
+	return command;
+}
+
+export interface CommandGroup {
+	description: string;
+	aliases?: readonly string[];
+
+	/**
+	 * Disables slash registration for all routes below this directory.
+	 * Prefix commands remain available.
+	 */
+	slash?: boolean;
+
+	guildOnly?: boolean;
+
+	userPermissions?: readonly PermissionResolvable[];
+	botPermissions?: readonly PermissionResolvable[];
+}
+
+export function defineCommandGroup(group: CommandGroup): CommandGroup {
+	return group;
+}
+
+export type CommandPath =
+	| readonly [string]
+	| readonly [string, string]
+	| readonly [string, string, string];
+
+export interface CommandRoute {
+	/**
+	 * [command]
+	 *
+	 * [command, subcommand]
+	 *
+	 * [command, subcommandGroup, subcommand]
+	 */
+	path: CommandPath;
+
+	command: AnyCommand;
+
+	/**
+	 * One metadata entry for every route segment except the command leaf.
+	 */
+	groups?: readonly CommandGroup[];
 }
 
 export interface CommandHandlerConfig {
-    prefix: string | ((message: Message) => string | Promise<string>);
+	prefix: string | ((message: Message) => string | Promise<string>);
 
-    allowOnlyDevs?: boolean;
-    devIds?: readonly string[];
+	allowOnlyDevs?: boolean;
+	devIds?: readonly string[];
 
-    logger?: CommandLogger;
+	logger?: CommandLogger;
 
-    feedbackRenderer?: CommandFeedbackRenderer;
+	feedbackRenderer?: CommandFeedbackRenderer;
 
-    isIgnored?: (userId: string) => boolean;
-    allowBots?: boolean;
+	isIgnored?: (userId: string) => boolean;
+	allowBots?: boolean;
 }
 
-interface ResolvedCommandHandlerConfig {
-    prefix: string | ((message: Message) => string | Promise<string>);
+type ResolvedCommandHandlerConfig = Required<
+	Omit<CommandHandlerConfig, "isIgnored">
+> & {
+	isIgnored?: CommandHandlerConfig["isIgnored"];
+};
 
-    allowOnlyDevs: boolean;
-    devIds: readonly string[];
-
-    logger: CommandLogger;
-
-    feedbackRenderer: CommandFeedbackRenderer;
-
-    isIgnored: ((userId: string) => boolean) | undefined;
-
-    allowBots: boolean;
+interface EffectiveCommandAccess {
+	guildOnly: boolean;
+	userPermissions: readonly PermissionResolvable[];
+	botPermissions: readonly PermissionResolvable[];
 }
 
-export function createSlashCommandBuilder(
-    command: AnyCommand,
-): SlashCommandBuilder {
-    const builder = new SlashCommandBuilder()
-        .setName(command.name)
-        .setDescription(command.description);
+type DirectSubcommandRoute = CommandRoute & {
+	path: readonly [string, string];
+	groups: readonly [CommandGroup];
+};
 
-    if (command.guildOnly) {
-        builder.setContexts(InteractionContextType.Guild);
-    }
+type GroupedSubcommandRoute = CommandRoute & {
+	path: readonly [string, string, string];
+	groups: readonly [CommandGroup, CommandGroup];
+};
 
-    if (command.userPermissions?.length) {
-        builder.setDefaultMemberPermissions(
-            new PermissionsBitField(command.userPermissions).bitfield,
-        );
-    }
+function isDirectSubcommandRoute(
+	route: CommandRoute,
+): route is DirectSubcommandRoute {
+	return route.path.length === 2 && route.groups?.length === 1;
+}
 
-    addArgumentsToSlashCommand(builder, command.arguments ?? EMPTY_ARGUMENTS);
+function isGroupedSubcommandRoute(
+	route: CommandRoute,
+): route is GroupedSubcommandRoute {
+	return route.path.length === 3 && route.groups?.length === 2;
+}
 
-    return builder;
+function routeKey(path: readonly string[]): string {
+	return path.map((segment) => segment.toLowerCase()).join(" ");
+}
+
+function validateName(name: string, label: string): void {
+	if (!COMMAND_NAME_PATTERN.test(name)) {
+		throw new Error(
+			`${label} "${name}" must contain only lowercase letters, ` +
+				"numbers, hyphens, or underscores and must be " +
+				"1 to 32 characters long.",
+		);
+	}
+}
+
+function validateDescription(description: string, label: string): void {
+	if (description.length < 1 || description.length > 100) {
+		throw new Error(
+			`${label} must have a description between ` + "1 and 100 characters.",
+		);
+	}
+}
+
+function validateAliases(aliases: readonly string[], label: string): void {
+	for (const alias of aliases) {
+		validateName(alias, `${label} alias`);
+	}
 }
 
 function validateCommand(command: AnyCommand): void {
-    if (!/^[a-z0-9_-]{1,32}$/u.test(command.name)) {
-        throw new Error(
-            `Command name "${command.name}" must ` +
-                "contain only lowercase letters, " +
-                "numbers, hyphens, or underscores " +
-                "and must be 1 to 32 characters long.",
-        );
-    }
+	validateName(command.name, "Command name");
 
-    if (command.description.length < 1 || command.description.length > 100) {
-        throw new Error(
-            `Command "${command.name}" must have ` +
-                "a description between 1 and 100 " +
-                "characters.",
-        );
-    }
+	validateDescription(command.description, `Command "${command.name}"`);
 
-    for (const alias of command.aliases ?? []) {
-        if (!/^[a-z0-9_-]+$/u.test(alias)) {
-            throw new Error(
-                `Command "${command.name}" has an ` +
-                    `invalid alias: "${alias}".`,
-            );
-        }
-    }
+	validateAliases(command.aliases ?? [], `Command "${command.name}"`);
 
-    validateArgumentSchema(command.name, command.arguments ?? EMPTY_ARGUMENTS);
+	validateArgumentSchema(command.name, command.arguments ?? EMPTY_ARGUMENTS);
+}
+
+export function validateCommandRoute(route: CommandRoute): void {
+	const { path, command } = route;
+	const groups = route.groups ?? [];
+
+	for (const segment of path) {
+		validateName(segment, "Command route segment");
+	}
+
+	if (path.at(-1) !== command.name) {
+		throw new Error(
+			`Command route "${path.join(" ")}" must end with ` +
+				`the command name "${command.name}".`,
+		);
+	}
+
+	if (groups.length !== path.length - 1) {
+		throw new Error(
+			`Command route "${path.join(" ")}" requires exactly ` +
+				`${path.length - 1} group metadata entries.`,
+		);
+	}
+
+	validateCommand(command);
+
+	groups.forEach((group, index) => {
+		const groupPath = path.slice(0, index + 1).join(" ");
+
+		validateDescription(group.description, `Command group "${groupPath}"`);
+
+		validateAliases(group.aliases ?? [], `Command group "${groupPath}"`);
+	});
+}
+
+function getEffectiveAccess(route: CommandRoute): EffectiveCommandAccess {
+	const groups = route.groups ?? [];
+
+	return {
+		guildOnly:
+			route.command.guildOnly === true ||
+			groups.some((group) => group.guildOnly === true),
+
+		userPermissions: [
+			...groups.flatMap((group) => group.userPermissions ?? []),
+			...(route.command.userPermissions ?? []),
+		],
+
+		botPermissions: [
+			...groups.flatMap((group) => group.botPermissions ?? []),
+			...(route.command.botPermissions ?? []),
+		],
+	};
+}
+
+function isSlashEnabled(route: CommandRoute): boolean {
+	return (
+		route.command.slash !== false &&
+		(route.groups ?? []).every((group) => group.slash !== false)
+	);
+}
+
+function applyRootCommandSettings(
+	builder: SlashCommandBuilder,
+	guildOnly: boolean,
+	userPermissions: readonly PermissionResolvable[],
+): void {
+	if (guildOnly) {
+		builder.setContexts(InteractionContextType.Guild);
+	}
+
+	if (userPermissions.length > 0) {
+		builder.setDefaultMemberPermissions(
+			new PermissionsBitField(userPermissions).bitfield,
+		);
+	}
+}
+
+function addRouteArguments(
+	builder: SlashCommandBuilder | SlashCommandSubcommandBuilder,
+	route: CommandRoute,
+): void {
+	addArgumentsToSlashCommand(
+		builder,
+		route.command.arguments ?? EMPTY_ARGUMENTS,
+	);
+}
+
+function createFlatSlashCommandBuilder(
+	route: CommandRoute,
+): SlashCommandBuilder {
+	const builder = new SlashCommandBuilder()
+		.setName(route.command.name)
+		.setDescription(route.command.description);
+
+	const access = getEffectiveAccess(route);
+
+	applyRootCommandSettings(builder, access.guildOnly, access.userPermissions);
+
+	addRouteArguments(builder, route);
+
+	return builder;
+}
+
+function permissionSignature(
+	permissions: readonly PermissionResolvable[],
+): string {
+	return permissions.map(String).join("\u0000");
+}
+
+function assertConsistentGroupMetadata(
+	routes: readonly CommandRoute[],
+	groupIndex: number,
+): CommandGroup {
+	const first = routes[0]?.groups?.[groupIndex];
+
+	if (!first) {
+		throw new Error("Missing command group metadata.");
+	}
+
+	for (const route of routes.slice(1)) {
+		const candidate = route.groups?.[groupIndex];
+
+		if (!candidate) {
+			throw new Error(
+				`Missing group metadata for route ` + `"${route.path.join(" ")}".`,
+			);
+		}
+
+		if (
+			candidate.description !== first.description ||
+			candidate.guildOnly !== first.guildOnly ||
+			candidate.slash !== first.slash ||
+			permissionSignature(candidate.userPermissions ?? []) !==
+				permissionSignature(first.userPermissions ?? [])
+		) {
+			throw new Error(
+				`Inconsistent metadata for command group ` +
+					`"${route.path.slice(0, groupIndex + 1).join(" ")}".`,
+			);
+		}
+	}
+
+	return first;
+}
+
+function createNestedSlashCommandBuilder(
+	rootName: string,
+	routes: readonly CommandRoute[],
+): SlashCommandBuilder {
+	const rootGroup = assertConsistentGroupMetadata(routes, 0);
+
+	const builder = new SlashCommandBuilder()
+		.setName(rootName)
+		.setDescription(rootGroup.description);
+
+	const allGuildOnly = routes.every(
+		(route) => getEffectiveAccess(route).guildOnly,
+	);
+
+	applyRootCommandSettings(
+		builder,
+		rootGroup.guildOnly === true || allGuildOnly,
+		rootGroup.userPermissions ?? [],
+	);
+
+	const directSubcommands = routes
+		.filter(isDirectSubcommandRoute)
+		.sort((left, right) =>
+			routeKey(left.path).localeCompare(routeKey(right.path)),
+		);
+
+	const groupedRoutes = routes.filter(isGroupedSubcommandRoute);
+
+	const groupNames = new Set(groupedRoutes.map((route) => route.path[1]));
+
+	for (const route of directSubcommands) {
+		const subcommandName = route.path[1];
+
+		if (groupNames.has(subcommandName)) {
+			throw new Error(
+				`"${rootName} ${subcommandName}" cannot be both ` +
+					"a subcommand and a subcommand group.",
+			);
+		}
+	}
+
+	if (directSubcommands.length + groupNames.size > 25) {
+		throw new Error(
+			`Slash command "${rootName}" cannot contain more ` +
+				"than 25 subcommands and subcommand groups.",
+		);
+	}
+
+	for (const route of directSubcommands) {
+		builder.addSubcommand((subcommand) => {
+			subcommand
+				.setName(route.path[1])
+				.setDescription(route.command.description);
+
+			addRouteArguments(subcommand, route);
+
+			return subcommand;
+		});
+	}
+
+	const groupedByName = new Map<string, GroupedSubcommandRoute[]>();
+
+	for (const route of groupedRoutes) {
+		const groupName = route.path[1];
+		const existing = groupedByName.get(groupName) ?? [];
+
+		existing.push(route);
+		groupedByName.set(groupName, existing);
+	}
+
+	const sortedGroups = [...groupedByName.entries()].sort(([left], [right]) =>
+		left.localeCompare(right),
+	);
+
+	for (const [groupName, groupRoutes] of sortedGroups) {
+		if (groupRoutes.length > 25) {
+			throw new Error(
+				`Slash subcommand group ` +
+					`"${rootName} ${groupName}" cannot contain ` +
+					"more than 25 subcommands.",
+			);
+		}
+
+		const group = assertConsistentGroupMetadata(groupRoutes, 1);
+
+		builder.addSubcommandGroup((subcommandGroup) => {
+			subcommandGroup.setName(groupName).setDescription(group.description);
+
+			const sortedRoutes = groupRoutes.sort((left, right) =>
+				routeKey(left.path).localeCompare(routeKey(right.path)),
+			);
+
+			for (const route of sortedRoutes) {
+				subcommandGroup.addSubcommand((subcommand) => {
+					subcommand
+						.setName(route.path[2])
+						.setDescription(route.command.description);
+
+					addRouteArguments(subcommand, route);
+
+					return subcommand;
+				});
+			}
+
+			return subcommandGroup;
+		});
+	}
+
+	return builder;
+}
+
+export function createSlashCommandBuilders(
+	routes: readonly CommandRoute[],
+): SlashCommandBuilder[] {
+	for (const route of routes) {
+		validateCommandRoute(route);
+	}
+
+	const slashRoutes = routes.filter(isSlashEnabled);
+	const routesByRoot = new Map<string, CommandRoute[]>();
+
+	for (const route of slashRoutes) {
+		const root = route.path[0];
+		const existing = routesByRoot.get(root) ?? [];
+
+		existing.push(route);
+		routesByRoot.set(root, existing);
+	}
+
+	const builders: SlashCommandBuilder[] = [];
+
+	const sortedRoots = [...routesByRoot.entries()].sort(([left], [right]) =>
+		left.localeCompare(right),
+	);
+
+	for (const [root, rootRoutes] of sortedRoots) {
+		const flatRoutes = rootRoutes.filter((route) => route.path.length === 1);
+
+		const nestedRoutes = rootRoutes.filter((route) => route.path.length > 1);
+
+		if (flatRoutes.length > 0 && nestedRoutes.length > 0) {
+			throw new Error(
+				`Slash command "${root}" cannot execute ` +
+					"directly and also contain subcommands.",
+			);
+		}
+
+		if (flatRoutes.length > 1) {
+			throw new Error(`Duplicate slash command route "${root}".`);
+		}
+
+		const flatRoute = flatRoutes[0];
+
+		builders.push(
+			flatRoute
+				? createFlatSlashCommandBuilder(flatRoute)
+				: createNestedSlashCommandBuilder(root, nestedRoutes),
+		);
+	}
+
+	return builders;
+}
+
+/**
+ * Backwards-compatible builder for a single flat command.
+ */
+export function createSlashCommandBuilder(
+	command: AnyCommand,
+): SlashCommandBuilder {
+	return createFlatSlashCommandBuilder({
+		path: [command.name],
+		command,
+		groups: [],
+	});
+}
+
+function getSegmentAliases(
+	route: CommandRoute,
+	index: number,
+): readonly string[] {
+	if (index === route.path.length - 1) {
+		return route.command.aliases ?? [];
+	}
+
+	return route.groups?.[index]?.aliases ?? [];
+}
+
+function createRouteLookupKeys(route: CommandRoute): string[] {
+	const variants = route.path.map((segment, index) => [
+		segment,
+		...getSegmentAliases(route, index),
+	]);
+
+	let keys: string[][] = [[]];
+
+	for (const segmentVariants of variants) {
+		keys = keys.flatMap((prefix) =>
+			segmentVariants.map((segment) => [...prefix, segment]),
+		);
+	}
+
+	return [...new Set(keys.map(routeKey))];
 }
 
 export class CommandManager extends EventEmitter {
-    public readonly commands = new Collection<string, AnyCommand>();
+	/**
+	 * Canonical routes:
+	 * "ping"
+	 * "admin ban"
+	 * "admin user info"
+	 */
+	public readonly routes = new Collection<string, CommandRoute>();
+
+	/**
+	 * Canonical routes and every prefix alias combination.
+	 */
+	public readonly commands = new Collection<string, AnyCommand>();
+
+	private readonly routeLookup = new Collection<string, CommandRoute>();
+
+	private readonly config: ResolvedCommandHandlerConfig;
+
+	private static _instance: CommandManager;
+
+	public constructor(config: CommandHandlerConfig) {
+		super();
+
+		this.config = {
+			prefix: config.prefix,
+			allowOnlyDevs: config.allowOnlyDevs ?? false,
+			devIds: config.devIds ?? [],
+			logger: config.logger ?? defaultCommandLogger,
+			feedbackRenderer:
+				config.feedbackRenderer ?? defaultCommandFeedbackRenderer,
+			isIgnored: config.isIgnored,
+			allowBots: config.allowBots ?? false,
+		};
+
+		CommandManager._instance = this;
+	}
+
+	public static get instance(): CommandManager {
+		if (!CommandManager._instance) {
+			throw new Error("CommandManager has not been initialized yet.");
+		}
+
+		return CommandManager._instance;
+	}
+
+	/**
+	 * Backwards-compatible registration for flat commands.
+	 */
+	public registerCommands(commands: readonly AnyCommand[]): void {
+		this.registerCommandRoutes(
+			commands.map((command) => ({
+				path: [command.name],
+				command,
+				groups: [],
+			})),
+		);
+	}
+
+	public registerCommandRoutes(routes: readonly CommandRoute[]): void {
+		const stagedCanonical = new Map<string, CommandRoute>();
+
+		const stagedLookup = new Map<string, CommandRoute>();
+
+		/*
+		 * Validate and stage everything before mutating the manager.
+		 * Registration is therefore atomic.
+		 */
+		for (const route of routes) {
+			validateCommandRoute(route);
+
+			const canonicalKey = routeKey(route.path);
+
+			if (this.routes.has(canonicalKey) || stagedCanonical.has(canonicalKey)) {
+				throw new Error(
+					`Command route "${canonicalKey}" ` + "is already registered.",
+				);
+			}
+
+			stagedCanonical.set(canonicalKey, route);
+
+			for (const lookupKey of createRouteLookupKeys(route)) {
+				const existing =
+					stagedLookup.get(lookupKey) ?? this.routeLookup.get(lookupKey);
+
+				if (existing && routeKey(existing.path) !== canonicalKey) {
+					throw new Error(
+						`Command route or alias ` +
+							`"${lookupKey}" is already ` +
+							`registered by ` +
+							`"${existing.path.join(" ")}".`,
+					);
+				}
+
+				stagedLookup.set(lookupKey, route);
+			}
+		}
+
+		for (const [canonicalKey, route] of stagedCanonical) {
+			this.routes.set(canonicalKey, route);
+		}
+
+		for (const [lookupKey, route] of stagedLookup) {
+			this.routeLookup.set(lookupKey, route);
 
-    private readonly config: ResolvedCommandHandlerConfig;
+			this.commands.set(lookupKey, route.command);
+		}
+	}
 
-    private static _instance: CommandManager;
+	private createContext<Arguments extends object>(
+		payload: ChatInputCommandInteraction | Message,
+		args: Arguments,
+	): CommandContext<Arguments> {
+		return new CommandContext(payload, args, {
+			logger: this.config.logger,
+			feedbackRenderer: this.config.feedbackRenderer,
+		});
+	}
 
-    constructor(config: CommandHandlerConfig) {
-        super();
+	private resolveMessageRoute(tokens: readonly string[]): {
+		route: CommandRoute;
+		consumedTokens: number;
+	} | null {
+		const maximumRouteLength = Math.min(3, tokens.length);
 
-        this.config = {
-            prefix: config.prefix,
+		/*
+		 * Longest-path matching prevents an argument from being confused with
+		 * a subcommand:
+		 *
+		 * admin user info -> checked before admin user -> before admin.
+		 */
+		for (let length = maximumRouteLength; length >= 1; length--) {
+			const key = routeKey(tokens.slice(0, length));
 
-            allowOnlyDevs: config.allowOnlyDevs ?? false,
+			const route = this.routeLookup.get(key);
 
-            devIds: config.devIds ?? [],
+			if (route) {
+				return {
+					route,
+					consumedTokens: length,
+				};
+			}
+		}
 
-            logger: config.logger ?? defaultCommandLogger,
+		return null;
+	}
 
-            feedbackRenderer:
-                config.feedbackRenderer ?? defaultCommandFeedbackRenderer,
+	public async handleMessage(message: Message): Promise<boolean> {
+		const prefix =
+			typeof this.config.prefix === "function"
+				? await this.config.prefix(message)
+				: this.config.prefix;
 
-            isIgnored: config.isIgnored,
+		const normalizedContent = message.content
+			.replace(/[\u200B-\u200D\uFEFF]/gu, "")
+			.trimStart();
 
-            allowBots: config.allowBots ?? false,
-        };
+		if (!normalizedContent.startsWith(prefix)) {
+			return false;
+		}
 
-        CommandManager._instance = this;
-    }
+		if (!this.canProcessUser(message.author.id, message.author.bot)) {
+			return false;
+		}
 
-    public static get instance(): CommandManager {
-        if (!CommandManager._instance) {
-            throw new Error(
-                "CommandManager has not been " + "initialized yet.",
-            );
-        }
+		const commandInput = normalizedContent.slice(prefix.length).trim();
 
-        return CommandManager._instance;
-    }
+		const tokenized = tokenizeArguments(commandInput);
 
-    public registerCommands(commands: readonly AnyCommand[]): void {
-        for (const command of commands) {
-            validateCommand(command);
+		if (!tokenized.success) {
+			await this.createContext(message, {}).replyError(tokenized.error.message);
 
-            this.registerName(command.name, command);
+			return false;
+		}
 
-            for (const alias of command.aliases ?? []) {
-                this.registerName(alias, command);
-            }
-        }
-    }
+		const resolved = this.resolveMessageRoute(tokenized.tokens);
 
-    private registerName(name: string, command: AnyCommand): void {
-        const normalizedName = name.toLowerCase();
+		if (!resolved) {
+			return false;
+		}
 
-        const existing = this.commands.get(normalizedName);
+		const { route, consumedTokens } = resolved;
 
-        if (existing && existing !== command) {
-            throw new Error(
-                `Command name or alias ` +
-                    `"${normalizedName}" is already ` +
-                    `registered by "${existing.name}".`,
-            );
-        }
+		const argumentTokens = tokenized.tokens.slice(consumedTokens);
 
-        this.commands.set(normalizedName, command);
-    }
+		const baseContext = this.createContext(message, {});
 
-    private createContext<Arguments extends object>(
-        payload: ChatInputCommandInteraction | Message,
-        args: Arguments,
-    ): CommandContext<Arguments> {
-        return new CommandContext(payload, args, {
-            logger: this.config.logger,
+		if (!(await this.checkAccess(route, baseContext))) {
+			return false;
+		}
 
-            feedbackRenderer: this.config.feedbackRenderer,
-        });
-    }
+		const schema = route.command.arguments ?? EMPTY_ARGUMENTS;
 
-    public async handleMessage(message: Message): Promise<boolean> {
-        const prefix =
-            typeof this.config.prefix === "function"
-                ? await this.config.prefix(message)
-                : this.config.prefix;
+		const parsed = await parseMessageArguments(schema, message, argumentTokens);
 
-        const normalizedContent = message.content
-            .replace(/[\u200B-\u200D\uFEFF]/gu, "")
-            .trimStart();
+		if (!parsed.success) {
+			const usage = formatArgumentUsage(schema);
 
-        if (!normalizedContent.startsWith(prefix)) {
-            return false;
-        }
+			const routeUsage = route.path.join(" ");
 
-        if (!this.canProcessUser(message.author.id, message.author.bot)) {
-            return false;
-        }
+			const usageText = usage
+				? `\nUsage: \`${prefix}${routeUsage} ${usage}\``
+				: "";
 
-        const commandInput = normalizedContent.slice(prefix.length).trim();
+			await baseContext.replyError(parsed.error.message + usageText);
 
-        const tokenized = tokenizeArguments(commandInput);
+			return false;
+		}
 
-        if (!tokenized.success) {
-            const context = this.createContext(message, {});
+		return this.executeCommand(
+			route,
+			this.createContext(message, parsed.value),
+		);
+	}
 
-            await context.replyError(tokenized.error.message);
+	public async handleInteraction(
+		interaction: ChatInputCommandInteraction,
+	): Promise<boolean> {
+		if (!interaction.isChatInputCommand()) {
+			return false;
+		}
 
-            return false;
-        }
+		if (!this.canProcessUser(interaction.user.id, interaction.user.bot)) {
+			return false;
+		}
 
-        const tokens = tokenized.tokens;
+		const subcommandGroup = interaction.options.getSubcommandGroup(false);
 
-        const commandName = tokens.shift()?.toLowerCase();
+		const subcommand = interaction.options.getSubcommand(false);
 
-        if (!commandName) {
-            return false;
-        }
+		const path = [
+			interaction.commandName,
+			...(subcommandGroup ? [subcommandGroup] : []),
+			...(subcommand ? [subcommand] : []),
+		];
 
-        const command = this.commands.get(commandName);
+		const route = this.routes.get(routeKey(path));
 
-        if (!command) {
-            return false;
-        }
+		if (!route || !isSlashEnabled(route)) {
+			return false;
+		}
 
-        const baseContext = this.createContext(message, {});
+		const baseContext = this.createContext(interaction, {});
 
-        if (!(await this.checkAccess(command, baseContext))) {
-            return false;
-        }
+		if (!(await this.checkAccess(route, baseContext))) {
+			return false;
+		}
 
-        const parsed = await parseMessageArguments(
-            command.arguments ?? EMPTY_ARGUMENTS,
-            message,
-            tokens,
-        );
+		const parsed = await parseInteractionArguments(
+			route.command.arguments ?? EMPTY_ARGUMENTS,
+			interaction,
+		);
 
-        if (!parsed.success) {
-            const usage = formatArgumentUsage(
-                command.arguments ?? EMPTY_ARGUMENTS,
-            );
+		if (!parsed.success) {
+			await baseContext.replyError(parsed.error.message);
 
-            const usageText = usage
-                ? `\nUsage: \`${prefix}` + `${command.name} ${usage}\``
-                : "";
+			return false;
+		}
 
-            await baseContext.replyError(parsed.error.message + usageText);
+		return this.executeCommand(
+			route,
+			this.createContext(interaction, parsed.value),
+		);
+	}
 
-            return false;
-        }
+	private canProcessUser(userId: string, isBot: boolean): boolean {
+		if (isBot && !this.config.allowBots) {
+			return false;
+		}
 
-        return this.executeCommand(
-            command,
-            this.createContext(message, parsed.value),
-        );
-    }
+		if (this.config.isIgnored?.(userId)) {
+			return false;
+		}
 
-    public async handleInteraction(
-        interaction: ChatInputCommandInteraction,
-    ): Promise<boolean> {
-        if (!interaction.isChatInputCommand()) {
-            return false;
-        }
+		if (this.config.allowOnlyDevs && !this.config.devIds.includes(userId)) {
+			return false;
+		}
 
-        if (!this.canProcessUser(interaction.user.id, interaction.user.bot)) {
-            return false;
-        }
+		return true;
+	}
 
-        const command = this.commands.get(
-            interaction.commandName.toLowerCase(),
-        );
+	private async checkAccess(
+		route: CommandRoute,
+		context: CommandContext<Record<string, never>>,
+	): Promise<boolean> {
+		const access = getEffectiveAccess(route);
 
-        if (!command || command.slash === false) {
-            return false;
-        }
+		if (access.guildOnly && !context.guild) {
+			await context.replyError("This command can only be used in a server.");
 
-        const baseContext = this.createContext(interaction, {});
+			return false;
+		}
 
-        if (!(await this.checkAccess(command, baseContext))) {
-            return false;
-        }
+		if (!context.guild) {
+			return true;
+		}
 
-        const parsed = await parseInteractionArguments(
-            command.arguments ?? EMPTY_ARGUMENTS,
-            interaction,
-        );
-
-        if (!parsed.success) {
-            await baseContext.replyError(parsed.error.message);
-
-            return false;
-        }
-
-        return this.executeCommand(
-            command,
-            this.createContext(interaction, parsed.value),
-        );
-    }
-
-    private canProcessUser(userId: string, isBot: boolean): boolean {
-        if (isBot && !this.config.allowBots) {
-            return false;
-        }
+		const channel = context.raw.channel;
 
-        if (this.config.isIgnored?.(userId)) {
-            return false;
-        }
+		if (!channel?.isTextBased() || channel.isDMBased()) {
+			return true;
+		}
 
-        if (this.config.allowOnlyDevs && !this.config.devIds.includes(userId)) {
-            return false;
-        }
+		const member = context.member ?? (await context.fetchMember());
 
-        return true;
-    }
-
-    private async checkAccess(
-        command: AnyCommand,
-        context: CommandContext<Record<string, never>>,
-    ): Promise<boolean> {
-        if (command.guildOnly && !context.guild) {
-            await context.replyError(
-                "This command can only be used " + "in a server.",
-            );
-
-            return false;
-        }
-
-        if (!context.guild) {
-            return true;
-        }
-
-        const channel = context.raw.channel;
-
-        if (!channel?.isTextBased() || channel.isDMBased()) {
-            return true;
-        }
-
-        const member = context.member ?? (await context.fetchMember());
-
-        if (!member) {
-            await context.replyError(
-                "Could not resolve your server " + "member data.",
-            );
-
-            return false;
-        }
-
-        if (command.userPermissions?.length) {
-            const missingPermissions = member
-                .permissionsIn(channel)
-                .missing(command.userPermissions);
-
-            if (missingPermissions.length > 0) {
-                await context.replyError(
-                    "You lack the required " +
-                        "permissions to use this: " +
-                        `\`${missingPermissions.join(", ")}\``,
-                );
-
-                return false;
-            }
-        }
-
-        if (command.botPermissions?.length) {
-            const botMember =
-                context.guild.members.me ??
-                (await context.guild.members.fetchMe().catch(() => null));
-
-            if (!botMember) {
-                await context.replyError(
-                    "Could not resolve my server " + "member data.",
-                );
-
-                return false;
-            }
-
-            const missingPermissions = botMember
-                .permissionsIn(channel)
-                .missing(command.botPermissions);
-
-            if (missingPermissions.length > 0) {
-                await context.replyError(
-                    "I am missing permissions " +
-                        "to execute this: " +
-                        `\`${missingPermissions.join(", ")}\``,
-                );
-
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private async executeCommand(
-        command: AnyCommand,
-        context: CommandContext<ParsedArguments<ArgumentSchema>>,
-    ): Promise<boolean> {
-        try {
-            this.emit("commandStart", command, context);
-
-            await command.execute(context);
-
-            this.emit("commandSuccess", command, context);
-
-            return true;
-        } catch (error) {
-            this.config.logger.error(`Error executing ${command.name}:`, error);
-
-            await context
-                .replyError(
-                    "An unexpected error occurred " +
-                        "while executing this command.",
-                )
-                .catch(() => {});
-
-            this.emit("commandError", command, error, context);
-
-            return false;
-        }
-    }
+		if (!member) {
+			await context.replyError("Could not resolve your server member data.");
+
+			return false;
+		}
+
+		if (access.userPermissions.length > 0) {
+			const missingPermissions = member
+				.permissionsIn(channel)
+				.missing(access.userPermissions);
+
+			if (missingPermissions.length > 0) {
+				await context.replyError(
+					"You lack the required " +
+						"permissions to use this: " +
+						`\`${missingPermissions.join(", ")}\``,
+				);
+
+				return false;
+			}
+		}
+
+		if (access.botPermissions.length > 0) {
+			const botMember =
+				context.guild.members.me ??
+				(await context.guild.members.fetchMe().catch(() => null));
+
+			if (!botMember) {
+				await context.replyError("Could not resolve my server member data.");
+
+				return false;
+			}
+
+			const missingPermissions = botMember
+				.permissionsIn(channel)
+				.missing(access.botPermissions);
+
+			if (missingPermissions.length > 0) {
+				await context.replyError(
+					`I am missing permissions to execute this: \`${missingPermissions.join(", ")}\``,
+				);
+
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private async executeCommand(
+		route: CommandRoute,
+		context: CommandContext<ParsedArguments<ArgumentSchema>>,
+	): Promise<boolean> {
+		const commandName = route.path.join(" ");
+
+		try {
+			this.emit("commandStart", route.command, context, route);
+
+			await route.command.execute(context);
+
+			this.emit("commandSuccess", route.command, context, route);
+
+			return true;
+		} catch (error) {
+			this.config.logger.error(`Error executing ${commandName}:`, error);
+
+			await context
+				.replyError(
+					"An unexpected error occurred " + "while executing this command.",
+				)
+				.catch(() => {});
+
+			this.emit("commandError", route.command, error, context, route);
+
+			return false;
+		}
+	}
 }

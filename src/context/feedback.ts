@@ -3,7 +3,7 @@ import {
     type RGBTuple,
     TextDisplayBuilder,
 } from "discord.js";
-import type { CommandReplyPayload } from "@/context";
+import type { CommandReplyPayload } from "./reply";
 
 export interface CommandFeedbackRenderer {
     error(message: string): CommandReplyPayload;

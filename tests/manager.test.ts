@@ -118,6 +118,12 @@ describe("CommandManager", () => {
             const baseInteraction = {
                 isChatInputCommand: () => true,
                 commandName: "testcmd",
+
+                options: {
+                    getSubcommandGroup: mock(() => null),
+                    getSubcommand: mock(() => null),
+                },
+
                 deferred: false,
                 replied: false,
                 reply: mock().mockResolvedValue(true),

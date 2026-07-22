@@ -1,4 +1,7 @@
-import type { SlashCommandBuilder } from "discord.js";
+import type {
+    SlashCommandBuilder,
+    SlashCommandSubcommandBuilder,
+} from "discord.js";
 import type { ArgumentSchema } from "./types";
 
 /**
@@ -8,7 +11,7 @@ import type { ArgumentSchema } from "./types";
  * @param schema - The schema defining the command's arguments.
  */
 export function addArgumentsToSlashCommand(
-    builder: SlashCommandBuilder,
+    builder: SlashCommandBuilder | SlashCommandSubcommandBuilder,
     schema: ArgumentSchema,
 ): void {
     for (const [name, definition] of Object.entries(schema)) {
@@ -19,10 +22,15 @@ export function addArgumentsToSlashCommand(
                         .setName(name)
                         .setDescription(definition.description)
                         .setRequired(definition.required);
-                    if (definition.minLength !== undefined)
+
+                    if (definition.minLength !== undefined) {
                         option.setMinLength(definition.minLength);
-                    if (definition.maxLength !== undefined)
+                    }
+
+                    if (definition.maxLength !== undefined) {
                         option.setMaxLength(definition.maxLength);
+                    }
+
                     return option;
                 });
                 break;
@@ -44,10 +52,15 @@ export function addArgumentsToSlashCommand(
                         .setName(name)
                         .setDescription(definition.description)
                         .setRequired(definition.required);
-                    if (definition.min !== undefined)
+
+                    if (definition.min !== undefined) {
                         option.setMinValue(definition.min);
-                    if (definition.max !== undefined)
+                    }
+
+                    if (definition.max !== undefined) {
                         option.setMaxValue(definition.max);
+                    }
+
                     return option;
                 });
                 break;
@@ -58,10 +71,15 @@ export function addArgumentsToSlashCommand(
                         .setName(name)
                         .setDescription(definition.description)
                         .setRequired(definition.required);
-                    if (definition.min !== undefined)
+
+                    if (definition.min !== undefined) {
                         option.setMinValue(definition.min);
-                    if (definition.max !== undefined)
+                    }
+
+                    if (definition.max !== undefined) {
                         option.setMaxValue(definition.max);
+                    }
+
                     return option;
                 });
                 break;
