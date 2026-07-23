@@ -1,0 +1,1 @@
+{"version":3,"file":"internal.d.ts","sourceRoot":"","sources":["../../src/components/internal.ts"],"names":[],"mappings":"AAAA;;;;;GAKG;AACH,MAAM,MAAM,iBAAiB,CAAC,OAAO,IAAI,CAAC,OAAO,EAAE,OAAO,KAAK,OAAO,GAAG,IAAI,CAAC;AAE9E;;;;;GAKG;AACH,wBAAgB,gBAAgB,CAAC,OAAO,EACpC,OAAO,EAAE,OAAO,EAChB,SAAS,EAAE,iBAAiB,CAAC,OAAO,CAAC,GACtC,OAAO,CAET"}
