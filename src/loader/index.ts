@@ -8,21 +8,38 @@ import { resolveCommandModules } from "./commandResolver";
 import { loadModules } from "./moduleLoader";
 
 export * from "./commandResolver";
+export * from "./eventLoader";
+export * from "./eventResolver";
 export * from "./moduleLoader";
 
+/**
+ * Configuration for automatic command loading.
+ */
 export interface CommandLoaderConfig extends CommandHandlerConfig {
     directory: string;
 
-    /** Directory command resolution is recursive by default. */
+    /**
+     * Whether command directory resolution is recursive.
+     *
+     * @defaultValue true
+     */
     recursive?: boolean;
 }
 
+/**
+ * Result of loading command modules.
+ */
 export interface CommandLoaderResult {
     manager: CommandManager;
-    /** Slash-command manifest ready for Discord registration. */
+
+    /**
+     * Slash-command manifest ready for Discord registration.
+     */
     slashCommandPayloads: SlashCommandPayload[];
 
-    /** @deprecated Use `slashCommandPayloads` instead. */
+    /**
+     * @deprecated Use `slashCommandPayloads` instead.
+     */
     restPayloads: SlashCommandPayload[];
 
     diagnostics: {
@@ -30,10 +47,12 @@ export interface CommandLoaderResult {
         groupCount: number;
         skippedCount: number;
         failedCount: number;
+
         skipped: {
             file: string;
             reason: string;
         }[];
+
         failed: {
             file: string;
             error: string;
@@ -41,6 +60,9 @@ export interface CommandLoaderResult {
     };
 }
 
+/**
+ * Discovers command modules and registers their canonical routes.
+ */
 export async function loadCommands(
     config: CommandLoaderConfig,
 ): Promise<CommandLoaderResult> {
@@ -51,9 +73,16 @@ export async function loadCommands(
         directory: config.directory,
         recursive: config.recursive ?? true,
         logger,
+
+        /*
+         * `_group` is command-directory metadata. Other underscore-prefixed
+         * files remain private.
+         */
+        allowedPrivateFileStems: ["_group"],
     });
 
     const resolved = resolveCommandModules(imported.successful);
+
     const failed = [...imported.failed, ...resolved.failed];
 
     for (const skipped of resolved.skipped) {

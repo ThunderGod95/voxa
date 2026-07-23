@@ -1,19 +1,13 @@
-export interface CommandLogger {
-    error(message: string, ...args: unknown[]): void;
-    warn(message: string, ...args: unknown[]): void;
-    info?(message: string, ...args: unknown[]): void;
-}
+import { defaultVoxaLogger, type VoxaLogger } from "../logger";
 
-export const defaultCommandLogger: CommandLogger = {
-    error(message, ...args) {
-        console.error(message, ...args);
-    },
+/**
+ * Logger used by the command subsystem.
+ *
+ * This remains as a command-specific alias for backward compatibility.
+ */
+export type CommandLogger = VoxaLogger;
 
-    warn(message, ...args) {
-        console.warn(message, ...args);
-    },
-
-    info(message, ...args) {
-        console.info(message, ...args);
-    },
-};
+/**
+ * Default command logger backed by the shared Voxa logger.
+ */
+export const defaultCommandLogger: CommandLogger = defaultVoxaLogger;

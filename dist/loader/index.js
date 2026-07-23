@@ -2,7 +2,12 @@ import { CommandManager, createSlashCommandPayloads, } from "../manager";
 import { resolveCommandModules } from "./commandResolver";
 import { loadModules } from "./moduleLoader";
 export * from "./commandResolver";
+export * from "./eventLoader";
+export * from "./eventResolver";
 export * from "./moduleLoader";
+/**
+ * Discovers command modules and registers their canonical routes.
+ */
 export async function loadCommands(config) {
     const logger = config.logger ?? console;
     const manager = new CommandManager(config);
@@ -10,6 +15,11 @@ export async function loadCommands(config) {
         directory: config.directory,
         recursive: config.recursive ?? true,
         logger,
+        /*
+         * `_group` is command-directory metadata. Other underscore-prefixed
+         * files remain private.
+         */
+        allowedPrivateFileStems: ["_group"],
     });
     const resolved = resolveCommandModules(imported.successful);
     const failed = [...imported.failed, ...resolved.failed];

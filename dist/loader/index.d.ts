@@ -1,16 +1,32 @@
 import { type CommandHandlerConfig, CommandManager, type SlashCommandPayload } from "../manager";
 export * from "./commandResolver";
+export * from "./eventLoader";
+export * from "./eventResolver";
 export * from "./moduleLoader";
+/**
+ * Configuration for automatic command loading.
+ */
 export interface CommandLoaderConfig extends CommandHandlerConfig {
     directory: string;
-    /** Directory command resolution is recursive by default. */
+    /**
+     * Whether command directory resolution is recursive.
+     *
+     * @defaultValue true
+     */
     recursive?: boolean;
 }
+/**
+ * Result of loading command modules.
+ */
 export interface CommandLoaderResult {
     manager: CommandManager;
-    /** Slash-command manifest ready for Discord registration. */
+    /**
+     * Slash-command manifest ready for Discord registration.
+     */
     slashCommandPayloads: SlashCommandPayload[];
-    /** @deprecated Use `slashCommandPayloads` instead. */
+    /**
+     * @deprecated Use `slashCommandPayloads` instead.
+     */
     restPayloads: SlashCommandPayload[];
     diagnostics: {
         loadedCount: number;
@@ -27,5 +43,8 @@ export interface CommandLoaderResult {
         }[];
     };
 }
+/**
+ * Discovers command modules and registers their canonical routes.
+ */
 export declare function loadCommands(config: CommandLoaderConfig): Promise<CommandLoaderResult>;
 //# sourceMappingURL=index.d.ts.map

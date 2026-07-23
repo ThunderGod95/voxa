@@ -3,7 +3,10 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 const MODULE_EXTENSION_PATTERN = /\.(?:[cm]?[jt]s)$/u;
 const DECLARATION_FILE_PATTERN = /\.d\.(?:[cm]?ts)$/u;
-function isModuleFile(fileName) {
+function removeModuleExtension(fileName) {
+    return fileName.replace(MODULE_EXTENSION_PATTERN, "");
+}
+function isModuleFile(fileName, allowedPrivateFileStems) {
     if (!MODULE_EXTENSION_PATTERN.test(fileName)) {
         return false;
     }
@@ -13,20 +16,13 @@ function isModuleFile(fileName) {
     if (fileName.startsWith(".")) {
         return false;
     }
-    /*
-     * Underscore-prefixed files remain private, except for the reserved
-     * directory metadata module.
-     */
-    if (fileName.startsWith("_") &&
-        !/^_group\.(?:[cm]?[jt]s)$/u.test(fileName)) {
+    const fileStem = removeModuleExtension(fileName);
+    if (fileStem.startsWith("_") && !allowedPrivateFileStems.has(fileStem)) {
         return false;
     }
     return true;
 }
-function removeModuleExtension(fileName) {
-    return fileName.replace(MODULE_EXTENSION_PATTERN, "");
-}
-async function collectModuleFiles(directory, recursive) {
+async function collectModuleFiles(directory, recursive, allowedPrivateFileStems) {
     const files = [];
     async function visit(currentDirectory) {
         const entries = await fs.readdir(currentDirectory, {
@@ -43,7 +39,8 @@ async function collectModuleFiles(directory, recursive) {
                 }
                 continue;
             }
-            if (entry.isFile() && isModuleFile(entry.name)) {
+            if (entry.isFile() &&
+                isModuleFile(entry.name, allowedPrivateFileStems)) {
                 files.push(entryPath);
             }
         }
@@ -52,7 +49,10 @@ async function collectModuleFiles(directory, recursive) {
     return files;
 }
 /**
- * Scans a command directory and imports supported modules safely.
+ * Scans a directory and imports supported JavaScript and TypeScript modules.
+ *
+ * Files are discovered in deterministic lexical order. Declaration files,
+ * hidden files, and private underscore-prefixed files are excluded.
  */
 export async function loadModules(config) {
     const logger = config.logger ?? console;
@@ -61,9 +61,10 @@ export async function loadModules(config) {
         failed: [],
     };
     const rootDirectory = path.resolve(config.directory);
+    const allowedPrivateFileStems = new Set(config.allowedPrivateFileStems ?? []);
     let moduleFiles;
     try {
-        moduleFiles = await collectModuleFiles(rootDirectory, config.recursive ?? true);
+        moduleFiles = await collectModuleFiles(rootDirectory, config.recursive ?? true, allowedPrivateFileStems);
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

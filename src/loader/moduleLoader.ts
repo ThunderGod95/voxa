@@ -1,19 +1,49 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import type { VoxaLogger } from "../logger";
 
 const MODULE_EXTENSION_PATTERN = /\.(?:[cm]?[jt]s)$/u;
 const DECLARATION_FILE_PATTERN = /\.d\.(?:[cm]?ts)$/u;
 
+/**
+ * Configuration for filesystem module discovery.
+ */
 export interface ModuleLoaderConfig {
+    /**
+     * Root directory containing modules.
+     */
     directory: string;
+
+    /**
+     * Whether nested directories should be scanned.
+     *
+     * @defaultValue true
+     */
     recursive?: boolean;
-    logger?: {
-        error: (message: string, ...args: unknown[]) => void;
-        warn: (message: string, ...args: unknown[]) => void;
-    };
+
+    /**
+     * Logger used for filesystem and module-import failures.
+     */
+    logger?: VoxaLogger;
+
+    /**
+     * Underscore-prefixed module stems that should remain loadable.
+     *
+     * Underscore-prefixed modules are private by default. Command loading uses
+     * this option to allow its reserved `_group` metadata module.
+     *
+     * @example
+     * ```ts
+     * allowedPrivateFileStems: ["_group"]
+     * ```
+     */
+    allowedPrivateFileStems?: readonly string[];
 }
 
+/**
+ * Successfully imported filesystem module and its path metadata.
+ */
 export interface LoadResult {
     filePath: string;
     relativePath: string;
@@ -23,12 +53,25 @@ export interface LoadResult {
     moduleExports: Record<string, unknown>;
 }
 
+/**
+ * Result of importing every discoverable module in a directory.
+ */
 export interface ModuleLoaderResponse {
     successful: LoadResult[];
-    failed: { file: string; error: string }[];
+    failed: {
+        file: string;
+        error: string;
+    }[];
 }
 
-function isModuleFile(fileName: string): boolean {
+function removeModuleExtension(fileName: string): string {
+    return fileName.replace(MODULE_EXTENSION_PATTERN, "");
+}
+
+function isModuleFile(
+    fileName: string,
+    allowedPrivateFileStems: ReadonlySet<string>,
+): boolean {
     if (!MODULE_EXTENSION_PATTERN.test(fileName)) {
         return false;
     }
@@ -41,27 +84,19 @@ function isModuleFile(fileName: string): boolean {
         return false;
     }
 
-    /*
-     * Underscore-prefixed files remain private, except for the reserved
-     * directory metadata module.
-     */
-    if (
-        fileName.startsWith("_") &&
-        !/^_group\.(?:[cm]?[jt]s)$/u.test(fileName)
-    ) {
+    const fileStem = removeModuleExtension(fileName);
+
+    if (fileStem.startsWith("_") && !allowedPrivateFileStems.has(fileStem)) {
         return false;
     }
 
     return true;
 }
 
-function removeModuleExtension(fileName: string): string {
-    return fileName.replace(MODULE_EXTENSION_PATTERN, "");
-}
-
 async function collectModuleFiles(
     directory: string,
     recursive: boolean,
+    allowedPrivateFileStems: ReadonlySet<string>,
 ): Promise<string[]> {
     const files: string[] = [];
 
@@ -87,7 +122,10 @@ async function collectModuleFiles(
                 continue;
             }
 
-            if (entry.isFile() && isModuleFile(entry.name)) {
+            if (
+                entry.isFile() &&
+                isModuleFile(entry.name, allowedPrivateFileStems)
+            ) {
                 files.push(entryPath);
             }
         }
@@ -99,12 +137,16 @@ async function collectModuleFiles(
 }
 
 /**
- * Scans a command directory and imports supported modules safely.
+ * Scans a directory and imports supported JavaScript and TypeScript modules.
+ *
+ * Files are discovered in deterministic lexical order. Declaration files,
+ * hidden files, and private underscore-prefixed files are excluded.
  */
 export async function loadModules(
     config: ModuleLoaderConfig,
 ): Promise<ModuleLoaderResponse> {
     const logger = config.logger ?? console;
+
     const response: ModuleLoaderResponse = {
         successful: [],
         failed: [],
@@ -112,12 +154,17 @@ export async function loadModules(
 
     const rootDirectory = path.resolve(config.directory);
 
+    const allowedPrivateFileStems = new Set(
+        config.allowedPrivateFileStems ?? [],
+    );
+
     let moduleFiles: string[];
 
     try {
         moduleFiles = await collectModuleFiles(
             rootDirectory,
             config.recursive ?? true,
+            allowedPrivateFileStems,
         );
     } catch (error) {
         const errorMessage =

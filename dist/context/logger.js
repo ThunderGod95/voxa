@@ -1,12 +1,6 @@
-export const defaultCommandLogger = {
-    error(message, ...args) {
-        console.error(message, ...args);
-    },
-    warn(message, ...args) {
-        console.warn(message, ...args);
-    },
-    info(message, ...args) {
-        console.info(message, ...args);
-    },
-};
+import { defaultVoxaLogger } from "../logger";
+/**
+ * Default command logger backed by the shared Voxa logger.
+ */
+export const defaultCommandLogger = defaultVoxaLogger;
 //# sourceMappingURL=logger.js.map
