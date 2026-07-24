@@ -60,6 +60,7 @@ function validateGroup(
  * - Route depth.
  * - Required command-group metadata.
  * - Agreement between the route leaf and command name.
+ * - Message-default placement.
  *
  * @param route - Route to validate.
  *
@@ -90,6 +91,13 @@ export function validateCommandRoute(route: CommandRoute): void {
         throw new Error(
             `Command route "${path.join(" ")}" requires exactly ` +
                 `${path.length - 1} group metadata entries.`,
+        );
+    }
+
+    if (command.messageDefault && path.length === 1) {
+        throw new Error(
+            `Command route "${path.join(" ")}" cannot be a message default ` +
+                "because it has no parent route.",
         );
     }
 

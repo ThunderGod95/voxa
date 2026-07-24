@@ -59,19 +59,10 @@ function getSegmentAliases(
     return route.groups?.[index]?.aliases ?? [];
 }
 
-/**
- * Produces every canonical and aliased lookup key for a prefix route.
- *
- * For example, a route whose root and leaf both have one alias produces all
- * four combinations.
- *
- * @internal
- */
-export function createRouteLookupKeys(route: CommandRoute): string[] {
-    const variants = route.path.map((segment, index) => [
-        segment,
-        ...getSegmentAliases(route, index),
-    ]);
+function createLookupKeys(route: CommandRoute, segmentCount: number): string[] {
+    const variants = route.path
+        .slice(0, segmentCount)
+        .map((segment, index) => [segment, ...getSegmentAliases(route, index)]);
 
     let keys: string[][] = [[]];
 
@@ -85,6 +76,35 @@ export function createRouteLookupKeys(route: CommandRoute): string[] {
 }
 
 /**
+ * Produces every canonical and aliased lookup key for a prefix route.
+ *
+ * For example, a route whose root and leaf both have one alias produces all
+ * four combinations.
+ *
+ * @internal
+ */
+export function createRouteLookupKeys(route: CommandRoute): string[] {
+    return createLookupKeys(route, route.path.length);
+}
+
+/**
+ * Produces every canonical and aliased parent lookup key for a message-default
+ * command route.
+ *
+ * The command leaf and its aliases are intentionally omitted because invoking
+ * a message default means that no explicit subcommand segment was supplied.
+ *
+ * @internal
+ */
+export function createMessageDefaultLookupKeys(route: CommandRoute): string[] {
+    if (!route.command.messageDefault || route.path.length < 2) {
+        return [];
+    }
+
+    return createLookupKeys(route, route.path.length - 1);
+}
+
+/**
  * Result of matching a prefix-command route.
  *
  * @internal
@@ -95,7 +115,8 @@ export interface ResolvedMessageRoute {
 }
 
 /**
- * Stores canonical command routes and prefix-command alias lookups.
+ * Stores canonical command routes, prefix-command alias lookups, and
+ * message-default parent lookups.
  *
  * Registration is transactional: an invalid or conflicting route prevents the
  * entire batch from being applied.
@@ -109,23 +130,30 @@ export class CommandRouteRegistry {
     public readonly routes = new Collection<string, CommandRoute>();
 
     /**
-     * Canonical routes and every prefix-alias combination.
+     * Prefix-command lookup containing canonical routes, aliases, and
+     * message-default parent paths.
      */
     public readonly commands = new Collection<string, AnyCommand>();
 
     private readonly routeLookup = new Collection<string, CommandRoute>();
+
+    private readonly messageDefaultLookup = new Collection<
+        string,
+        CommandRoute
+    >();
 
     /**
      * Registers a collection of routes as one atomic operation.
      *
      * @param routes - Routes to validate and register.
      *
-     * @throws Error when a route is invalid or when a path or alias conflicts
-     * with another route.
+     * @throws Error when a route is invalid or when a path, alias, or
+     * message-default parent conflicts with another route.
      */
     public register(routes: readonly CommandRoute[]): void {
         const stagedCanonical = new Map<string, CommandRoute>();
         const stagedLookup = new Map<string, CommandRoute>();
+        const stagedMessageDefaults = new Map<string, CommandRoute>();
 
         for (const route of routes) {
             validateCommandRoute(route);
@@ -160,6 +188,58 @@ export class CommandRouteRegistry {
 
                 stagedLookup.set(lookupKey, route);
             }
+
+            for (const lookupKey of createMessageDefaultLookupKeys(route)) {
+                const existing =
+                    stagedMessageDefaults.get(lookupKey) ??
+                    this.messageDefaultLookup.get(lookupKey);
+
+                if (
+                    existing &&
+                    createRouteKey(existing.path) !== canonicalKey
+                ) {
+                    throw new Error(
+                        `Message-default route "${lookupKey}" is already ` +
+                            `registered by "${existing.path.join(" ")}".`,
+                    );
+                }
+
+                stagedMessageDefaults.set(lookupKey, route);
+            }
+        }
+
+        /*
+         * Prevent a real executable route from occupying a message-default
+         * parent path. Without this check, the explicit route would always
+         * shadow the default during longest-route resolution.
+         */
+        for (const [lookupKey, defaultRoute] of stagedMessageDefaults) {
+            const explicitRoute =
+                stagedLookup.get(lookupKey) ?? this.routeLookup.get(lookupKey);
+
+            if (explicitRoute) {
+                throw new Error(
+                    `Message-default parent "${lookupKey}" for ` +
+                        `"${defaultRoute.path.join(" ")}" conflicts with ` +
+                        `the executable route "${explicitRoute.path.join(" ")}".`,
+                );
+            }
+        }
+
+        /*
+         * Perform the inverse check for routes registered after an existing
+         * message default.
+         */
+        for (const [lookupKey, explicitRoute] of stagedLookup) {
+            const defaultRoute = this.messageDefaultLookup.get(lookupKey);
+
+            if (defaultRoute) {
+                throw new Error(
+                    `Command route or alias "${lookupKey}" for ` +
+                        `"${explicitRoute.path.join(" ")}" conflicts with ` +
+                        `the message-default route "${defaultRoute.path.join(" ")}".`,
+                );
+            }
         }
 
         for (const [canonicalKey, route] of stagedCanonical) {
@@ -170,13 +250,18 @@ export class CommandRouteRegistry {
             this.routeLookup.set(lookupKey, route);
             this.commands.set(lookupKey, route.command);
         }
+
+        for (const [lookupKey, route] of stagedMessageDefaults) {
+            this.messageDefaultLookup.set(lookupKey, route);
+            this.commands.set(lookupKey, route.command);
+        }
     }
 
     /**
      * Resolves an exact canonical route.
      *
      * Slash interactions use canonical Discord names and therefore do not use
-     * the alias lookup.
+     * the alias or message-default lookups.
      *
      * @param path - Canonical route segments.
      */
@@ -187,11 +272,9 @@ export class CommandRouteRegistry {
     /**
      * Resolves the longest matching prefix-command route.
      *
-     * Longest-first matching prevents a subcommand segment from being mistaken
-     * for the first argument of a shorter route.
-     *
-     * For example, `admin user info` is checked before `admin user` and
-     * `admin`.
+     * Explicit canonical and aliased routes are checked before message-default
+     * parent routes. This guarantees that an explicitly supplied subcommand
+     * always wins over a default subcommand.
      *
      * @param tokens - Tokenized prefix-command input.
      */
@@ -202,6 +285,21 @@ export class CommandRouteRegistry {
 
         for (let length = maximumRouteLength; length >= 1; length--) {
             const route = this.routeLookup.get(
+                createRouteKey(tokens.slice(0, length)),
+            );
+
+            if (route) {
+                return {
+                    route,
+                    consumedTokens: length,
+                };
+            }
+        }
+
+        const maximumParentLength = Math.min(2, tokens.length);
+
+        for (let length = maximumParentLength; length >= 1; length--) {
+            const route = this.messageDefaultLookup.get(
                 createRouteKey(tokens.slice(0, length)),
             );
 

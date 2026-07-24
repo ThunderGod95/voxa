@@ -68,6 +68,16 @@ export interface CommandDefinition<
     guildOnly?: boolean;
 
     /**
+     * Executes this command when its parent route is invoked without an explicit
+     * subcommand in a prefix message.
+     *
+     * This has no effect on slash commands.
+     *
+     * @defaultValue false
+     */
+    messageDefault?: boolean;
+
+    /**
      * Permissions the invoking guild member must have in the current channel.
      */
     userPermissions?: readonly PermissionResolvable[];
