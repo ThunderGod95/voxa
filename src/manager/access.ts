@@ -9,6 +9,7 @@ import type { CommandRoute } from "./route";
  * @internal
  */
 export interface EffectiveCommandAccess {
+    devOnly: boolean;
     guildOnly: boolean;
     userPermissions: readonly PermissionResolvable[];
     botPermissions: readonly PermissionResolvable[];
@@ -25,6 +26,10 @@ export function getEffectiveCommandAccess(
     const groups = route.groups ?? [];
 
     return {
+        devOnly:
+            route.command.devOnly === true ||
+            groups.some((group) => group.devOnly === true),
+
         guildOnly:
             route.command.guildOnly === true ||
             groups.some((group) => group.guildOnly === true),
@@ -70,11 +75,15 @@ type AccessControllerConfig = Required<
 export class CommandAccessController {
     public constructor(private readonly config: AccessControllerConfig) {}
 
+    private isDeveloper(userId: string): boolean {
+        return this.config.devIds.includes(userId);
+    }
+
     /**
      * Returns whether a user is globally eligible for command processing.
      *
-     * This check covers bot users, ignored users, and developer-only mode.
-     * Rejected users are ignored silently.
+     * This check covers bot users, ignored users, and global developer-only
+     * mode. Rejected users are ignored silently.
      */
     public canProcessUser(userId: string, isBot: boolean): boolean {
         if (isBot && !this.config.allowBots) {
@@ -85,7 +94,7 @@ export class CommandAccessController {
             return false;
         }
 
-        if (this.config.allowOnlyDevs && !this.config.devIds.includes(userId)) {
+        if (this.config.allowOnlyDevs && !this.isDeveloper(userId)) {
             return false;
         }
 
@@ -93,9 +102,12 @@ export class CommandAccessController {
     }
 
     /**
-     * Verifies guild restrictions and channel permissions for a route.
+     * Verifies inherited developer restrictions, guild restrictions, and
+     * channel permissions for a route.
      *
-     * Access failures are rendered through the supplied command context.
+     * Developer-only failures are ignored silently, matching global
+     * developer-only mode. Other access failures are rendered through the
+     * supplied command context.
      *
      * @param route - Route being invoked.
      * @param context - Context used to inspect the invocation and send errors.
@@ -106,7 +118,11 @@ export class CommandAccessController {
     ): Promise<boolean> {
         const access = getEffectiveCommandAccess(route);
 
-        if (access.guildOnly && !context.guild) {
+        if (access.devOnly && !this.isDeveloper(context.userId)) {
+            return false;
+        }
+
+        if (access.guildOnly && !context.guildOrNull) {
             await context.replyError(
                 "This command can only be used in a server.",
             );
@@ -114,7 +130,9 @@ export class CommandAccessController {
             return false;
         }
 
-        if (!context.guild) {
+        const guild = context.guildOrNull;
+
+        if (!guild) {
             return true;
         }
 
@@ -151,8 +169,8 @@ export class CommandAccessController {
 
         if (access.botPermissions.length > 0) {
             const botMember =
-                context.guild.members.me ??
-                (await context.guild.members.fetchMe().catch(() => null));
+                guild.members.me ??
+                (await guild.members.fetchMe().catch(() => null));
 
             if (!botMember) {
                 await context.replyError(
