@@ -11,6 +11,7 @@ import type { CommandRoute } from "./route";
  * - Route depth.
  * - Required command-group metadata.
  * - Agreement between the route leaf and command name.
+ * - Message-default placement.
  *
  * @param route - Route to validate.
  *

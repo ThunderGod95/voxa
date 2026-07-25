@@ -32,8 +32,8 @@ export class CommandManager extends EventEmitter {
      */
     routes;
     /**
-     * Prefix-command lookup containing canonical paths and every alias
-     * combination.
+     * Prefix-command lookup containing canonical paths, alias combinations, and
+     * message-default parent paths.
      *
      * The value is the command definition rather than its route. Use
      * {@link routes} when route or group metadata is required.

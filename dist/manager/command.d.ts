@@ -54,6 +54,24 @@ export interface CommandDefinition<Schema extends ArgumentSchema = typeof EMPTY_
      */
     guildOnly?: boolean;
     /**
+     * Restricts this command to users listed in the command manager's
+     * `devIds` configuration.
+     *
+     * This restriction is also inherited from parent command groups.
+     *
+     * @defaultValue false
+     */
+    devOnly?: boolean;
+    /**
+     * Executes this command when its parent route is invoked without an explicit
+     * subcommand in a prefix message.
+     *
+     * This has no effect on slash commands.
+     *
+     * @defaultValue false
+     */
+    messageDefault?: boolean;
+    /**
      * Permissions the invoking guild member must have in the current channel.
      */
     userPermissions?: readonly PermissionResolvable[];
@@ -121,8 +139,8 @@ export declare function defineCommand<const Schema extends ArgumentSchema = type
 /**
  * Metadata inherited by commands beneath a command directory.
  *
- * Group settings are cumulative. Nested commands inherit guild restrictions
- * and permission requirements from every parent group.
+ * Group settings are cumulative. Nested commands inherit guild restrictions,
+ * developer restrictions, and permission requirements from every parent group.
  */
 export interface CommandGroup {
     /**
@@ -147,6 +165,15 @@ export interface CommandGroup {
      * Restricts every route beneath this group to guilds.
      */
     guildOnly?: boolean;
+    /**
+     * Restricts every route beneath this group to users listed in the command
+     * manager's `devIds` configuration.
+     *
+     * Nested groups and commands cannot remove this restriction.
+     *
+     * @defaultValue false
+     */
+    devOnly?: boolean;
     /**
      * User permissions inherited by routes beneath this group.
      */
@@ -180,7 +207,10 @@ export interface CommandHandlerConfig {
      */
     allowOnlyDevs?: boolean;
     /**
-     * User IDs permitted to execute commands when `allowOnlyDevs` is enabled.
+     * User IDs recognized as bot developers.
+     *
+     * These IDs are used by the global `allowOnlyDevs` option and by commands
+     * or groups whose `devOnly` option is enabled.
      *
      * @defaultValue []
      */

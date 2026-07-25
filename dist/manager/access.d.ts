@@ -8,6 +8,7 @@ import type { CommandRoute } from "./route";
  * @internal
  */
 export interface EffectiveCommandAccess {
+    devOnly: boolean;
     guildOnly: boolean;
     userPermissions: readonly PermissionResolvable[];
     botPermissions: readonly PermissionResolvable[];
@@ -38,17 +39,21 @@ type AccessControllerConfig = Required<Pick<CommandHandlerConfig, "allowBots" | 
 export declare class CommandAccessController {
     private readonly config;
     constructor(config: AccessControllerConfig);
+    private isDeveloper;
     /**
      * Returns whether a user is globally eligible for command processing.
      *
-     * This check covers bot users, ignored users, and developer-only mode.
-     * Rejected users are ignored silently.
+     * This check covers bot users, ignored users, and global developer-only
+     * mode. Rejected users are ignored silently.
      */
     canProcessUser(userId: string, isBot: boolean): boolean;
     /**
-     * Verifies guild restrictions and channel permissions for a route.
+     * Verifies inherited developer restrictions, guild restrictions, and
+     * channel permissions for a route.
      *
-     * Access failures are rendered through the supplied command context.
+     * Developer-only failures are ignored silently, matching global
+     * developer-only mode. Other access failures are rendered through the
+     * supplied command context.
      *
      * @param route - Route being invoked.
      * @param context - Context used to inspect the invocation and send errors.

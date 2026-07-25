@@ -46,6 +46,16 @@ export declare function createRouteKey(path: readonly string[]): string;
  */
 export declare function createRouteLookupKeys(route: CommandRoute): string[];
 /**
+ * Produces every canonical and aliased parent lookup key for a message-default
+ * command route.
+ *
+ * The command leaf and its aliases are intentionally omitted because invoking
+ * a message default means that no explicit subcommand segment was supplied.
+ *
+ * @internal
+ */
+export declare function createMessageDefaultLookupKeys(route: CommandRoute): string[];
+/**
  * Result of matching a prefix-command route.
  *
  * @internal
@@ -55,7 +65,8 @@ export interface ResolvedMessageRoute {
     consumedTokens: number;
 }
 /**
- * Stores canonical command routes and prefix-command alias lookups.
+ * Stores canonical command routes, prefix-command alias lookups, and
+ * message-default parent lookups.
  *
  * Registration is transactional: an invalid or conflicting route prevents the
  * entire batch from being applied.
@@ -68,24 +79,26 @@ export declare class CommandRouteRegistry {
      */
     readonly routes: Collection<string, CommandRoute>;
     /**
-     * Canonical routes and every prefix-alias combination.
+     * Prefix-command lookup containing canonical routes, aliases, and
+     * message-default parent paths.
      */
     readonly commands: Collection<string, AnyCommand>;
     private readonly routeLookup;
+    private readonly messageDefaultLookup;
     /**
      * Registers a collection of routes as one atomic operation.
      *
      * @param routes - Routes to validate and register.
      *
-     * @throws Error when a route is invalid or when a path or alias conflicts
-     * with another route.
+     * @throws Error when a route is invalid or when a path, alias, or
+     * message-default parent conflicts with another route.
      */
     register(routes: readonly CommandRoute[]): void;
     /**
      * Resolves an exact canonical route.
      *
      * Slash interactions use canonical Discord names and therefore do not use
-     * the alias lookup.
+     * the alias or message-default lookups.
      *
      * @param path - Canonical route segments.
      */
@@ -93,11 +106,9 @@ export declare class CommandRouteRegistry {
     /**
      * Resolves the longest matching prefix-command route.
      *
-     * Longest-first matching prevents a subcommand segment from being mistaken
-     * for the first argument of a shorter route.
-     *
-     * For example, `admin user info` is checked before `admin user` and
-     * `admin`.
+     * Explicit canonical and aliased routes are checked before message-default
+     * parent routes. This guarantees that an explicitly supplied subcommand
+     * always wins over a default subcommand.
      *
      * @param tokens - Tokenized prefix-command input.
      */
