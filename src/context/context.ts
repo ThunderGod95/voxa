@@ -25,6 +25,7 @@ import {
 export interface CommandContextOptions {
     logger?: CommandLogger;
     feedbackRenderer?: CommandFeedbackRenderer;
+    devIds?: readonly string[];
 }
 
 /**
@@ -35,6 +36,11 @@ export class CommandContext<Arguments extends object = Record<string, never>> {
      * Arguments parsed and validated against the command's argument schema.
      */
     public readonly args: Arguments;
+
+    /**
+     * User IDs configured as bot developers.
+     */
+    public readonly devIds: readonly string[];
 
     private readonly invocation: CommandInvocation;
     private readonly responder: CommandResponder;
@@ -49,6 +55,7 @@ export class CommandContext<Arguments extends object = Record<string, never>> {
         const source = createCommandSource(payload);
 
         this.args = args;
+        this.devIds = options.devIds ?? [];
         this.invocation = new CommandInvocation(source);
         this.responder = createCommandResponder(source, logger);
         this.feedbackRenderer =
