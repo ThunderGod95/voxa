@@ -10,6 +10,10 @@ export class CommandContext {
      * Arguments parsed and validated against the command's argument schema.
      */
     args;
+    /**
+     * User IDs configured as bot developers.
+     */
+    devIds;
     invocation;
     responder;
     feedbackRenderer;
@@ -17,6 +21,7 @@ export class CommandContext {
         const logger = options.logger ?? defaultCommandLogger;
         const source = createCommandSource(payload);
         this.args = args;
+        this.devIds = options.devIds ?? [];
         this.invocation = new CommandInvocation(source);
         this.responder = createCommandResponder(source, logger);
         this.feedbackRenderer =

@@ -6,6 +6,7 @@ import { type CommandChannel, type CommandClient, type CommandInvocationKind, ty
 export interface CommandContextOptions {
     logger?: CommandLogger;
     feedbackRenderer?: CommandFeedbackRenderer;
+    devIds?: readonly string[];
 }
 /**
  * Shared execution context provided to message and interaction commands.
@@ -15,6 +16,10 @@ export declare class CommandContext<Arguments extends object = Record<string, ne
      * Arguments parsed and validated against the command's argument schema.
      */
     readonly args: Arguments;
+    /**
+     * User IDs configured as bot developers.
+     */
+    readonly devIds: readonly string[];
     private readonly invocation;
     private readonly responder;
     private readonly feedbackRenderer;

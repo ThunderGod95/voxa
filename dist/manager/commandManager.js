@@ -201,6 +201,7 @@ export class CommandManager extends EventEmitter {
         return new CommandContext(payload, args, {
             logger: this.config.logger,
             feedbackRenderer: this.config.feedbackRenderer,
+            devIds: this.config.devIds,
         });
     }
     async executeCommand(route, context) {
