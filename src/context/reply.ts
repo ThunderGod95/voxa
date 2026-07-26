@@ -98,6 +98,7 @@ function buildMessageOptions(
 
     const base = {
         allowedMentions: options.mentions,
+        files: options.files,
         flags: flags || undefined,
     };
 

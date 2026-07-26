@@ -18,6 +18,7 @@ function buildMessageOptions(payload, isInitialInteraction = false) {
     }
     const base = {
         allowedMentions: options.mentions,
+        files: options.files,
         flags: flags || undefined,
     };
     if (options.components !== undefined) {
