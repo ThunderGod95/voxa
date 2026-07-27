@@ -1,10 +1,14 @@
 import type { GuildMember, Role, User } from "discord.js";
 import { z } from "zod";
+import { formatArgumentChoiceValues, getArgumentChoiceValues } from "./choices";
 import { parseNaturalTime } from "./timeParser";
 import { resolveTimezone } from "./timezoneParser";
 import type {
+    ArgumentChoices,
+    ArgumentChoiceValue,
     BooleanArgumentDefinition,
     BooleanArgumentOptions,
+    InferArgumentChoiceValue,
     IntegerArgumentDefinition,
     IntegerArgumentOptions,
     MemberArgumentDefinition,
@@ -44,14 +48,36 @@ function applyRequired<Output, Required extends boolean>(
     >;
 }
 
+function applyChoices<Value extends ArgumentChoiceValue>(
+    schema: z.ZodType<Value>,
+    choices: ArgumentChoices<Value> | undefined,
+): z.ZodType<Value> {
+    if (choices === undefined) {
+        return schema;
+    }
+
+    const values = getArgumentChoiceValues(choices);
+    const allowedValues = new Set<Value>(values);
+
+    return schema.refine((value) => allowedValues.has(value), {
+        message: `Must be one of: ${formatArgumentChoiceValues(values)}.`,
+    });
+}
+
 /**
  * Factory object for creating strongly-typed command argument definitions.
  */
 export const argument = {
     /** Constructs a string argument definition. */
-    string<const Required extends boolean = false>(
-        options: StringArgumentOptions<Required>,
-    ): StringArgumentDefinition<Required> {
+    string<
+        const Required extends boolean = false,
+        const Choices extends ArgumentChoices<string> | undefined = undefined,
+    >(
+        options: StringArgumentOptions<Required, Choices>,
+    ): StringArgumentDefinition<
+        Required,
+        InferArgumentChoiceValue<Choices, string>
+    > {
         let schema = z.string({
             error: "Must be a string.",
         });
@@ -68,8 +94,15 @@ export const argument = {
             });
         }
 
+        type Output = InferArgumentChoiceValue<Choices, string>;
+
+        const choiceSchema = applyChoices(
+            schema,
+            options.choices,
+        ) as z.ZodType<Output>;
+
         const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
+        const finalSchema = applyRequired(choiceSchema, isRequired);
 
         return {
             type: "string",
@@ -78,14 +111,22 @@ export const argument = {
             rest: restValue(options.rest),
             minLength: options.minLength,
             maxLength: options.maxLength,
+            choices: options.choices,
+            autocomplete: options.autocomplete,
             _schema: finalSchema,
         };
     },
 
     /** Constructs an integer argument definition. Input is coerced automatically. */
-    integer<const Required extends boolean = false>(
-        options: IntegerArgumentOptions<Required>,
-    ): IntegerArgumentDefinition<Required> {
+    integer<
+        const Required extends boolean = false,
+        const Choices extends ArgumentChoices<number> | undefined = undefined,
+    >(
+        options: IntegerArgumentOptions<Required, Choices>,
+    ): IntegerArgumentDefinition<
+        Required,
+        InferArgumentChoiceValue<Choices, number>
+    > {
         let numberSchema = z
             .number({ error: "Must be a valid number." })
             .int({ message: "Must be a whole number." });
@@ -102,16 +143,27 @@ export const argument = {
             });
         }
 
-        const schema = z.preprocess((val) => {
-            if (typeof val === "number") return val;
-            if (typeof val === "string" && /^[+-]?\d+$/u.test(val.trim())) {
-                return Number(val);
+        const schema = z.preprocess((value) => {
+            if (typeof value === "number") {
+                return value;
             }
-            return val;
+
+            if (typeof value === "string" && /^[+-]?\d+$/u.test(value.trim())) {
+                return Number(value);
+            }
+
+            return value;
         }, numberSchema);
 
+        type Output = InferArgumentChoiceValue<Choices, number>;
+
+        const choiceSchema = applyChoices(
+            schema,
+            options.choices,
+        ) as z.ZodType<Output>;
+
         const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
+        const finalSchema = applyRequired(choiceSchema, isRequired);
 
         return {
             type: "integer",
@@ -120,14 +172,22 @@ export const argument = {
             rest: restValue(options.rest),
             min: options.min,
             max: options.max,
+            choices: options.choices,
+            autocomplete: options.autocomplete,
             _schema: finalSchema,
         };
     },
 
     /** Constructs a floating-point number argument definition. */
-    number<const Required extends boolean = false>(
-        options: NumberArgumentOptions<Required>,
-    ): NumberArgumentDefinition<Required> {
+    number<
+        const Required extends boolean = false,
+        const Choices extends ArgumentChoices<number> | undefined = undefined,
+    >(
+        options: NumberArgumentOptions<Required, Choices>,
+    ): NumberArgumentDefinition<
+        Required,
+        InferArgumentChoiceValue<Choices, number>
+    > {
         let numberSchema = z.number({
             error: "Must be a valid number.",
         });
@@ -144,17 +204,31 @@ export const argument = {
             });
         }
 
-        const schema = z.preprocess((val) => {
-            if (typeof val === "number") return val;
-            if (typeof val === "string" && val.trim().length > 0) {
-                const parsed = Number(val);
-                if (!Number.isNaN(parsed)) return parsed;
+        const schema = z.preprocess((value) => {
+            if (typeof value === "number") {
+                return value;
             }
-            return val;
+
+            if (typeof value === "string" && value.trim().length > 0) {
+                const parsed = Number(value);
+
+                if (!Number.isNaN(parsed)) {
+                    return parsed;
+                }
+            }
+
+            return value;
         }, numberSchema);
 
+        type Output = InferArgumentChoiceValue<Choices, number>;
+
+        const choiceSchema = applyChoices(
+            schema,
+            options.choices,
+        ) as z.ZodType<Output>;
+
         const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
+        const finalSchema = applyRequired(choiceSchema, isRequired);
 
         return {
             type: "number",
@@ -163,6 +237,8 @@ export const argument = {
             rest: restValue(options.rest),
             min: options.min,
             max: options.max,
+            choices: options.choices,
+            autocomplete: options.autocomplete,
             _schema: finalSchema,
         };
     },
@@ -296,6 +372,7 @@ export const argument = {
             pattern: options.pattern,
             hostname: options.hostname,
             protocol: options.protocol,
+            autocomplete: options.autocomplete,
             _schema: finalSchema,
         };
     },
@@ -331,6 +408,7 @@ export const argument = {
             description: options.description,
             required: isRequired,
             rest: restValue(options.rest),
+            autocomplete: options.autocomplete,
             _schema: finalSchema,
         };
     },
@@ -393,6 +471,7 @@ export const argument = {
             timezone,
             forwardDate,
             strict,
+            autocomplete: options.autocomplete,
             _schema: finalSchema,
         };
     },

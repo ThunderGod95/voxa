@@ -1,4 +1,4 @@
-import type { PermissionResolvable } from "discord.js";
+import type { AutocompleteInteraction, PermissionResolvable } from "discord.js";
 import type { CommandContext } from "../context";
 import type { CommandHandlerConfig } from "./command";
 import type { CommandRoute } from "./route";
@@ -192,6 +192,45 @@ export class CommandAccessController {
 
                 return false;
             }
+        }
+
+        return true;
+    }
+
+    public checkAutocompleteRoute(
+        route: CommandRoute,
+        interaction: AutocompleteInteraction,
+    ): boolean {
+        const access = getEffectiveCommandAccess(route);
+
+        if (access.devOnly && !this.isDeveloper(interaction.user.id)) {
+            return false;
+        }
+
+        if (access.guildOnly && !interaction.inGuild()) {
+            return false;
+        }
+
+        if (!interaction.inGuild()) {
+            return true;
+        }
+
+        if (
+            access.userPermissions.length > 0 &&
+            (!interaction.memberPermissions ||
+                interaction.memberPermissions.missing(access.userPermissions)
+                    .length > 0)
+        ) {
+            return false;
+        }
+
+        if (
+            access.botPermissions.length > 0 &&
+            (!interaction.appPermissions ||
+                interaction.appPermissions.missing(access.botPermissions)
+                    .length > 0)
+        ) {
+            return false;
         }
 
         return true;

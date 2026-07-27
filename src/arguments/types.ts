@@ -1,5 +1,61 @@
-import type { GuildMember, Role, User } from "discord.js";
+import type {
+    AutocompleteInteraction,
+    GuildMember,
+    Role,
+    User,
+} from "discord.js";
 import type { z } from "zod";
+
+export type ArgumentChoiceValue = string | number;
+
+export type ArgumentChoices<Value extends ArgumentChoiceValue> =
+    readonly Value[] | Readonly<Record<string, Value>>;
+
+export type InferArgumentChoiceValue<
+    Choices,
+    Fallback extends ArgumentChoiceValue,
+> = Choices extends readonly (infer Value extends Fallback)[]
+    ? Value
+    : Choices extends Readonly<Record<string, infer Value extends Fallback>>
+      ? Value
+      : Fallback;
+
+export interface ArgumentAutocompleteContext {
+    /**
+     * The raw Discord autocomplete interaction.
+     *
+     * This provides access to the user, guild, other supplied options, etc.
+     */
+    interaction: AutocompleteInteraction;
+
+    /** Name of the argument currently being completed. */
+    name: string;
+
+    /**
+     * Current user input.
+     *
+     * Discord exposes the focused autocomplete input as a string, including
+     * for integer and number options.
+     */
+    value: string;
+}
+
+export type ArgumentAutocompleteHandler<Value extends ArgumentChoiceValue> = (
+    context: ArgumentAutocompleteContext,
+) => ArgumentChoices<Value> | Promise<ArgumentChoices<Value>>;
+
+type ChoiceOrAutocompleteOptions<
+    Value extends ArgumentChoiceValue,
+    Choices extends ArgumentChoices<Value> | undefined,
+> = Choices extends undefined
+    ? {
+          choices?: undefined;
+          autocomplete?: ArgumentAutocompleteHandler<Value>;
+      }
+    : {
+          choices: Choices;
+          autocomplete?: never;
+      };
 
 /** Base configuration available to all argument types. */
 export interface BaseArgumentOptions<Required extends boolean> {
@@ -28,58 +84,70 @@ export interface BaseArgumentDefinition<
     _schema: z.ZodType<TOutput>;
 }
 
-export interface StringArgumentOptions<
+export type StringArgumentOptions<
     Required extends boolean = false,
-> extends BaseArgumentOptions<Required> {
+    Choices extends ArgumentChoices<string> | undefined = undefined,
+> = BaseArgumentOptions<Required> & {
     minLength?: number;
     maxLength?: number;
-}
+} & ChoiceOrAutocompleteOptions<string, Choices>;
 
 export interface StringArgumentDefinition<
     Required extends boolean = false,
+    Value extends string = string,
 > extends BaseArgumentDefinition<
     "string",
     Required,
-    Required extends true ? string : string | null
+    Required extends true ? Value : Value | null
 > {
     minLength?: number;
     maxLength?: number;
+    choices?: ArgumentChoices<string>;
+    autocomplete?: ArgumentAutocompleteHandler<string>;
 }
 
-export interface IntegerArgumentOptions<
+export type IntegerArgumentOptions<
     Required extends boolean = false,
-> extends BaseArgumentOptions<Required> {
+    Choices extends ArgumentChoices<number> | undefined = undefined,
+> = BaseArgumentOptions<Required> & {
     min?: number;
     max?: number;
-}
+} & ChoiceOrAutocompleteOptions<number, Choices>;
 
 export interface IntegerArgumentDefinition<
     Required extends boolean = false,
+    Value extends number = number,
 > extends BaseArgumentDefinition<
     "integer",
     Required,
-    Required extends true ? number : number | null
+    Required extends true ? Value : Value | null
 > {
     min?: number;
     max?: number;
+    choices?: ArgumentChoices<number>;
+    autocomplete?: ArgumentAutocompleteHandler<number>;
 }
 
-export interface NumberArgumentOptions<
+export type NumberArgumentOptions<
     Required extends boolean = false,
-> extends BaseArgumentOptions<Required> {
+    Choices extends ArgumentChoices<number> | undefined = undefined,
+> = BaseArgumentOptions<Required> & {
     min?: number;
     max?: number;
-}
+} & ChoiceOrAutocompleteOptions<number, Choices>;
 
 export interface NumberArgumentDefinition<
     Required extends boolean = false,
+    Value extends number = number,
 > extends BaseArgumentDefinition<
     "number",
     Required,
-    Required extends true ? number : number | null
+    Required extends true ? Value : Value | null
 > {
     min?: number;
     max?: number;
+    choices?: ArgumentChoices<number>;
+    autocomplete?: ArgumentAutocompleteHandler<number>;
 }
 
 export type BooleanArgumentOptions<Required extends boolean = false> =
@@ -134,6 +202,7 @@ export interface UrlArgumentOptions<
     pattern?: RegExp;
     hostname?: RegExp;
     protocol?: RegExp;
+    autocomplete?: ArgumentAutocompleteHandler<string>;
 }
 
 export interface UrlArgumentDefinition<
@@ -146,19 +215,24 @@ export interface UrlArgumentDefinition<
     pattern?: RegExp;
     hostname?: RegExp;
     protocol?: RegExp;
+    autocomplete?: ArgumentAutocompleteHandler<string>;
 }
 
 export type TimeReference = Date | (() => Date);
 
 export type TimezoneArgumentOptions<Required extends boolean = false> =
-    BaseArgumentOptions<Required>;
+    BaseArgumentOptions<Required> & {
+        autocomplete?: ArgumentAutocompleteHandler<string>;
+    };
 
 export type TimezoneArgumentDefinition<Required extends boolean = false> =
     BaseArgumentDefinition<
         "timezone",
         Required,
         Required extends true ? string : string | null
-    >;
+    > & {
+        autocomplete?: ArgumentAutocompleteHandler<string>;
+    };
 
 export interface TimeArgumentOptions<
     Required extends boolean = false,
@@ -179,6 +253,8 @@ export interface TimeArgumentOptions<
 
     /** Use Chrono's strict parser instead of its casual parser. */
     strict?: boolean;
+
+    autocomplete?: ArgumentAutocompleteHandler<string>;
 }
 
 export interface TimeArgumentDefinition<
@@ -191,12 +267,13 @@ export interface TimeArgumentDefinition<
     timezone?: string;
     forwardDate: boolean;
     strict: boolean;
+    autocomplete?: ArgumentAutocompleteHandler<string>;
 }
 
 export type CommandArgumentDefinition =
-    | StringArgumentDefinition<boolean>
-    | IntegerArgumentDefinition<boolean>
-    | NumberArgumentDefinition<boolean>
+    | StringArgumentDefinition<boolean, string>
+    | IntegerArgumentDefinition<boolean, number>
+    | NumberArgumentDefinition<boolean, number>
     | BooleanArgumentDefinition<boolean>
     | UserArgumentDefinition<boolean>
     | MemberArgumentDefinition<boolean>

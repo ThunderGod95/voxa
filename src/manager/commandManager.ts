@@ -1,5 +1,7 @@
 import { EventEmitter } from "node:events";
 import type {
+    AutocompleteInteraction,
+    BaseInteraction,
     ChatInputCommandInteraction,
     Collection,
     Message,
@@ -10,6 +12,7 @@ import {
     type ParsedArguments,
     parseInteractionArguments,
     parseMessageArguments,
+    respondToArgumentAutocomplete,
     tokenizeArguments,
 } from "../arguments";
 import {
@@ -275,22 +278,28 @@ export class CommandManager extends EventEmitter {
     }
 
     /**
-     * Handles a Discord chat-input interaction as a possible slash command.
+     * Handles supported Discord command interactions.
      *
-     * Pass chat-input interactions from `interactionCreate` to this method.
-     *
-     * The returned value is `true` only when a registered slash route completes
-     * successfully.
-     *
-     * @param interaction - Chat-input interaction to process.
+     * Chat-input interactions execute commands. Autocomplete interactions are
+     * routed to the focused argument's autocomplete handler.
      */
     public async handleInteraction(
-        interaction: ChatInputCommandInteraction,
+        interaction: BaseInteraction,
     ): Promise<boolean> {
+        if (interaction.isAutocomplete()) {
+            return this.handleAutocompleteInteraction(interaction);
+        }
+
         if (!interaction.isChatInputCommand()) {
             return false;
         }
 
+        return this.handleChatInputInteraction(interaction);
+    }
+
+    private async handleChatInputInteraction(
+        interaction: ChatInputCommandInteraction,
+    ): Promise<boolean> {
         if (
             !this.accessController.canProcessUser(
                 interaction.user.id,
@@ -300,19 +309,9 @@ export class CommandManager extends EventEmitter {
             return false;
         }
 
-        const subcommandGroup = interaction.options.getSubcommandGroup(false);
+        const route = this.resolveInteractionRoute(interaction);
 
-        const subcommand = interaction.options.getSubcommand(false);
-
-        const path = [
-            interaction.commandName,
-            ...(subcommandGroup ? [subcommandGroup] : []),
-            ...(subcommand ? [subcommand] : []),
-        ];
-
-        const route = this.registry.getCanonical(path);
-
-        if (!route || !isSlashRouteEnabled(route)) {
+        if (!route) {
             return false;
         }
 
@@ -329,7 +328,6 @@ export class CommandManager extends EventEmitter {
 
         if (!parsed.success) {
             await baseContext.replyError(parsed.error.message);
-
             return false;
         }
 
@@ -337,6 +335,72 @@ export class CommandManager extends EventEmitter {
             route,
             this.createContext(interaction, parsed.value),
         );
+    }
+
+    private async handleAutocompleteInteraction(
+        interaction: AutocompleteInteraction,
+    ): Promise<boolean> {
+        if (
+            !this.accessController.canProcessUser(
+                interaction.user.id,
+                interaction.user.bot,
+            )
+        ) {
+            await interaction.respond([]).catch(() => {});
+            return false;
+        }
+
+        const route = this.resolveInteractionRoute(interaction);
+
+        if (!route) {
+            await interaction.respond([]).catch(() => {});
+            return false;
+        }
+
+        if (!this.accessController.checkAutocompleteRoute(route, interaction)) {
+            await interaction.respond([]).catch(() => {});
+            return false;
+        }
+
+        try {
+            const handled = await respondToArgumentAutocomplete(
+                route.command.arguments ?? EMPTY_ARGUMENTS,
+                interaction,
+            );
+
+            if (!handled) {
+                await interaction.respond([]);
+            }
+
+            return handled;
+        } catch (error) {
+            this.config.logger.error(
+                `Error autocompleting ${route.path.join(" ")}:`,
+                error,
+            );
+
+            await interaction.respond([]).catch(() => {});
+
+            return false;
+        }
+    }
+
+    private resolveInteractionRoute(
+        interaction: ChatInputCommandInteraction | AutocompleteInteraction,
+    ): CommandRoute | null {
+        const subcommandGroup = interaction.options.getSubcommandGroup(false);
+
+        const subcommand = interaction.options.getSubcommand(false);
+
+        const path = [
+            interaction.commandName,
+            ...(subcommandGroup ? [subcommandGroup] : []),
+            ...(subcommand ? [subcommand] : []),
+        ];
+
+        const route = this.registry.getCanonical(path);
+
+        return route && isSlashRouteEnabled(route) ? route : null;
     }
 
     private resolvePrefix(message: Message): Promise<string> {
