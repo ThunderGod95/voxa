@@ -1,3 +1,4 @@
+import { awaitCommandComponent, awaitCommandMessage, awaitCommandModal, createCommandComponentCollector, createCommandMessageCollector, } from "./collectors";
 import { defaultCommandFeedbackRenderer, } from "./feedback";
 import { defaultCommandLogger } from "./logger";
 import { createCommandResponder } from "./responder";
@@ -197,6 +198,51 @@ export class CommandContext {
      */
     showModal(modal) {
         return this.responder.showModal(modal);
+    }
+    /**
+     * Awaits one component interaction on a specific message.
+     *
+     * By default, only interactions from the command's invoking user are
+     * accepted.
+     */
+    awaitComponent(message, options) {
+        return awaitCommandComponent(message, this.userId, options);
+    }
+    /**
+     * Creates a native Discord.js component collector on a specific message.
+     *
+     * By default, only interactions from the command's invoking user are
+     * accepted.
+     */
+    createComponentCollector(message, options) {
+        return createCommandComponentCollector(message, this.userId, options);
+    }
+    /**
+     * Awaits one message in the command channel.
+     *
+     * By default, only messages from the command's invoking user are accepted.
+     */
+    awaitMessage(options = {}) {
+        return awaitCommandMessage(this.channel, this.userId, options);
+    }
+    /**
+     * Creates a native Discord.js message collector in the command channel.
+     *
+     * By default, only messages from the command's invoking user are accepted.
+     */
+    createMessageCollector(options = {}) {
+        return createCommandMessageCollector(this.channel, this.userId, options);
+    }
+    /**
+     * Awaits one modal submission.
+     *
+     * By default, only submissions from the command's invoking user are
+     * accepted.
+     *
+     * Throws when used by a message command.
+     */
+    awaitModal(options) {
+        return awaitCommandModal(this.interaction, this.userId, options);
     }
     replyError(message) {
         return this.reply(this.feedbackRenderer.error(message));
