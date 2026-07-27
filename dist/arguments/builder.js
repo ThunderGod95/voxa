@@ -51,6 +51,7 @@ export const argument = {
             minLength: options.minLength,
             maxLength: options.maxLength,
             choices: options.choices,
+            aliases: options.aliases,
             autocomplete: options.autocomplete,
             _schema: finalSchema,
         };

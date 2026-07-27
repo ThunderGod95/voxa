@@ -5,6 +5,12 @@ import { getRoleFromInput, getUserFromInput } from "../resolvers";
 async function resolveMessageValue(name, definition, input, message) {
     let rawValue = input;
     switch (definition.type) {
+        case "string": {
+            if (definition.aliases) {
+                rawValue = definition.aliases[input] ?? input;
+            }
+            break;
+        }
         case "user": {
             const user = await getUserFromInput(input, message);
             if (!user) {

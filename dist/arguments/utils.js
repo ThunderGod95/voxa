@@ -1,4 +1,4 @@
-import { resolveArgumentChoices } from "./choices";
+import { getArgumentChoiceValues, resolveArgumentChoices } from "./choices";
 /**
  * Mutates a SlashCommandBuilder by automatically appending options derived from an ArgumentSchema.
  *
@@ -155,6 +155,34 @@ function validateArgumentChoices(commandName, argumentName, definition) {
         }
     }
 }
+function validateStringAliases(commandName, argumentName, definition) {
+    if (definition.aliases === undefined) {
+        return;
+    }
+    if (definition.choices === undefined) {
+        throw new Error(`Argument "${argumentName}" in command "${commandName}" ` +
+            "cannot define aliases without choices.");
+    }
+    const allowedValues = new Set(getArgumentChoiceValues(definition.choices));
+    for (const [alias, value] of Object.entries(definition.aliases)) {
+        if (alias.length < 1 || alias.length > 100) {
+            throw new Error(`Alias "${alias}" for argument "${argumentName}" ` +
+                `in command "${commandName}" must contain between ` +
+                "1 and 100 characters.");
+        }
+        if (!allowedValues.has(value)) {
+            throw new Error(`Alias "${alias}" for argument "${argumentName}" ` +
+                `in command "${commandName}" points to invalid value ` +
+                `"${value}".`);
+        }
+        const validation = definition._schema.safeParse(value);
+        if (!validation.success) {
+            throw new Error(`Alias "${alias}" for argument "${argumentName}" ` +
+                `in command "${commandName}" is invalid: ` +
+                `${validation.error.issues[0]?.message ?? "Invalid value."}`);
+        }
+    }
+}
 /**
  * Asserts the validity of an ArgumentSchema at boot-time.
  * Throws an Error if logical constraints (e.g., ordering, limits) are violated.
@@ -207,6 +235,9 @@ export function validateArgumentSchema(commandName, schema) {
             definition.type === "integer" ||
             definition.type === "number") {
             validateArgumentChoices(commandName, name, definition);
+        }
+        if (definition.type === "string") {
+            validateStringAliases(commandName, name, definition);
         }
     }
 }

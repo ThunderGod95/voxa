@@ -3,6 +3,7 @@ import type { z } from "zod";
 export type ArgumentChoiceValue = string | number;
 export type ArgumentChoices<Value extends ArgumentChoiceValue> = readonly Value[] | Readonly<Record<string, Value>>;
 export type InferArgumentChoiceValue<Choices, Fallback extends ArgumentChoiceValue> = Choices extends readonly (infer Value extends Fallback)[] ? Value : Choices extends Readonly<Record<string, infer Value extends Fallback>> ? Value : Fallback;
+export type StringChoiceAliases<Value extends string> = Readonly<Record<string, Value>>;
 export interface ArgumentAutocompleteContext {
     /**
      * The raw Discord autocomplete interaction.
@@ -52,11 +53,22 @@ export interface BaseArgumentDefinition<Type extends string, Required extends bo
 export type StringArgumentOptions<Required extends boolean = false, Choices extends ArgumentChoices<string> | undefined = undefined> = BaseArgumentOptions<Required> & {
     minLength?: number;
     maxLength?: number;
+    /**
+     * Prefix-only aliases for choice values.
+     *
+     * Example:
+     * aliases: { rg: "reactions_given", rr: "reactions_received" }
+     */
+    aliases?: Choices extends undefined ? never : StringChoiceAliases<InferArgumentChoiceValue<Choices, string>>;
 } & ChoiceOrAutocompleteOptions<string, Choices>;
 export interface StringArgumentDefinition<Required extends boolean = false, Value extends string = string> extends BaseArgumentDefinition<"string", Required, Required extends true ? Value : Value | null> {
     minLength?: number;
     maxLength?: number;
     choices?: ArgumentChoices<string>;
+    /**
+     * Prefix-only aliases for choice values.
+     */
+    aliases?: StringChoiceAliases<Value>;
     autocomplete?: ArgumentAutocompleteHandler<string>;
 }
 export type IntegerArgumentOptions<Required extends boolean = false, Choices extends ArgumentChoices<number> | undefined = undefined> = BaseArgumentOptions<Required> & {

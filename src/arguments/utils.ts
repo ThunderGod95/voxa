@@ -2,11 +2,7 @@ import type {
     SlashCommandBuilder,
     SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-    formatArgumentChoiceValues,
-    getArgumentChoiceValues,
-    resolveArgumentChoices,
-} from "./choices";
+import { getArgumentChoiceValues, resolveArgumentChoices } from "./choices";
 
 import type {
     ArgumentChoices,
