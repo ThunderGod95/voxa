@@ -20,6 +20,10 @@ export type InferArgumentChoiceValue<
       ? Value
       : Fallback;
 
+export type StringChoiceAliases<Value extends string> = Readonly<
+    Record<string, Value>
+>;
+
 export interface ArgumentAutocompleteContext {
     /**
      * The raw Discord autocomplete interaction.
@@ -90,6 +94,15 @@ export type StringArgumentOptions<
 > = BaseArgumentOptions<Required> & {
     minLength?: number;
     maxLength?: number;
+    /**
+     * Prefix-only aliases for choice values.
+     *
+     * Example:
+     * aliases: { rg: "reactions_given", rr: "reactions_received" }
+     */
+    aliases?: Choices extends undefined
+        ? never
+        : StringChoiceAliases<InferArgumentChoiceValue<Choices, string>>;
 } & ChoiceOrAutocompleteOptions<string, Choices>;
 
 export interface StringArgumentDefinition<
@@ -103,6 +116,10 @@ export interface StringArgumentDefinition<
     minLength?: number;
     maxLength?: number;
     choices?: ArgumentChoices<string>;
+    /**
+     * Prefix-only aliases for choice values.
+     */
+    aliases?: StringChoiceAliases<Value>;
     autocomplete?: ArgumentAutocompleteHandler<string>;
 }
 

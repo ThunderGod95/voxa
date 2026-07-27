@@ -20,6 +20,13 @@ async function resolveMessageValue(
     let rawValue: unknown = input;
 
     switch (definition.type) {
+        case "string": {
+            if (definition.aliases) {
+                rawValue = definition.aliases[input] ?? input;
+            }
+            break;
+        }
+
         case "user": {
             const user = await getUserFromInput(input, message);
             if (!user) {
