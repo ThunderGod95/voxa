@@ -10,7 +10,7 @@ import {
     defaultCommandFeedbackRenderer,
 } from "./feedback";
 import { type CommandLogger, defaultCommandLogger } from "./logger";
-import type { CommandReplyPayload } from "./reply";
+import type { CommandModalPayload, CommandReplyPayload } from "./reply";
 import { type CommandResponder, createCommandResponder } from "./responder";
 import {
     type CommandChannel,
@@ -250,6 +250,16 @@ export class CommandContext<Arguments extends object = Record<string, never>> {
 
     public followUp(payload: CommandReplyPayload): Promise<Message> {
         return this.responder.followUp(payload);
+    }
+
+    /**
+     * Shows a modal as the initial response to an interaction.
+     *
+     * Throws for message commands or when the interaction has already been
+     * acknowledged.
+     */
+    public showModal(modal: CommandModalPayload): Promise<void> {
+        return this.responder.showModal(modal);
     }
 
     public replyError(message: string): Promise<Message> {

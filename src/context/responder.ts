@@ -5,6 +5,7 @@ import {
 } from "discord.js";
 import type { CommandLogger } from "./logger";
 import {
+    type CommandModalPayload,
     type CommandReplyPayload,
     toInteractionEditReplyOptions,
     toInteractionReplyOptions,
@@ -17,6 +18,7 @@ export interface CommandResponder {
     deferReply(ephemeral?: boolean): Promise<void>;
     editReply(payload: CommandReplyPayload): Promise<Message>;
     followUp(payload: CommandReplyPayload): Promise<Message>;
+    showModal(modal: CommandModalPayload): Promise<void>;
 }
 
 class InteractionCommandResponder implements CommandResponder {
@@ -54,6 +56,16 @@ class InteractionCommandResponder implements CommandResponder {
         }
 
         return this.interaction.followUp(toInteractionReplyOptions(payload));
+    }
+
+    public async showModal(modal: CommandModalPayload): Promise<void> {
+        if (this.interaction.deferred || this.interaction.replied) {
+            throw new Error(
+                "Cannot show a modal after the interaction has been acknowledged.",
+            );
+        }
+
+        await this.interaction.showModal(modal);
     }
 }
 
@@ -96,6 +108,12 @@ class MessageCommandResponder implements CommandResponder {
 
     public followUp(payload: CommandReplyPayload): Promise<Message> {
         return this.message.reply(toMessageReplyOptions(payload));
+    }
+
+    public async showModal(_modal: CommandModalPayload): Promise<void> {
+        throw new Error(
+            "Modals can only be shown in response to Discord interactions.",
+        );
     }
 }
 

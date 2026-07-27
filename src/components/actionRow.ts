@@ -3,14 +3,19 @@ import type {
     JSONEncodable,
     MessageActionRowComponentBuilder,
 } from "discord.js";
+import { ActionRowBuilder } from "discord.js";
 import {
-    ActionRowBuilder,
-    ChannelSelectMenuBuilder,
-    MentionableSelectMenuBuilder,
-    RoleSelectMenuBuilder,
-    StringSelectMenuBuilder,
-    UserSelectMenuBuilder,
-} from "discord.js";
+    type ChannelSelectInput,
+    channelSelect as createChannelSelect,
+    mentionableSelect as createMentionableSelect,
+    roleSelect as createRoleSelect,
+    stringSelect as createStringSelect,
+    userSelect as createUserSelect,
+    type MentionableSelectInput,
+    type RoleSelectInput,
+    type StringSelectInput,
+    type UserSelectInput,
+} from "./inputs";
 import { type BuilderConfigurer, configureBuilder } from "./internal";
 import {
     type ButtonOptions,
@@ -78,73 +83,32 @@ export class V2ActionRowBuilder implements JSONEncodable<ActionRowJSON> {
     }
 
     /** Adds a string select menu. */
-    public stringSelect(
-        input:
-            | StringSelectMenuBuilder
-            | BuilderConfigurer<StringSelectMenuBuilder>,
-    ): this {
-        const component =
-            input instanceof StringSelectMenuBuilder
-                ? input
-                : configureBuilder(new StringSelectMenuBuilder(), input);
-
-        this.builder.addComponents(component);
+    public stringSelect(input: StringSelectInput): this {
+        this.builder.addComponents(createStringSelect(input));
         return this;
     }
 
     /** Adds a user select menu. */
-    public userSelect(
-        input: UserSelectMenuBuilder | BuilderConfigurer<UserSelectMenuBuilder>,
-    ): this {
-        const component =
-            input instanceof UserSelectMenuBuilder
-                ? input
-                : configureBuilder(new UserSelectMenuBuilder(), input);
-
-        this.builder.addComponents(component);
+    public userSelect(input: UserSelectInput): this {
+        this.builder.addComponents(createUserSelect(input));
         return this;
     }
 
     /** Adds a role select menu. */
-    public roleSelect(
-        input: RoleSelectMenuBuilder | BuilderConfigurer<RoleSelectMenuBuilder>,
-    ): this {
-        const component =
-            input instanceof RoleSelectMenuBuilder
-                ? input
-                : configureBuilder(new RoleSelectMenuBuilder(), input);
-
-        this.builder.addComponents(component);
+    public roleSelect(input: RoleSelectInput): this {
+        this.builder.addComponents(createRoleSelect(input));
         return this;
     }
 
     /** Adds a mentionable select menu. */
-    public mentionableSelect(
-        input:
-            | MentionableSelectMenuBuilder
-            | BuilderConfigurer<MentionableSelectMenuBuilder>,
-    ): this {
-        const component =
-            input instanceof MentionableSelectMenuBuilder
-                ? input
-                : configureBuilder(new MentionableSelectMenuBuilder(), input);
-
-        this.builder.addComponents(component);
+    public mentionableSelect(input: MentionableSelectInput): this {
+        this.builder.addComponents(createMentionableSelect(input));
         return this;
     }
 
     /** Adds a channel select menu. */
-    public channelSelect(
-        input:
-            | ChannelSelectMenuBuilder
-            | BuilderConfigurer<ChannelSelectMenuBuilder>,
-    ): this {
-        const component =
-            input instanceof ChannelSelectMenuBuilder
-                ? input
-                : configureBuilder(new ChannelSelectMenuBuilder(), input);
-
-        this.builder.addComponents(component);
+    public channelSelect(input: ChannelSelectInput): this {
+        this.builder.addComponents(createChannelSelect(input));
         return this;
     }
 

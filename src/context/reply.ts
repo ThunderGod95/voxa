@@ -1,5 +1,6 @@
 import type {
     APIEmbed,
+    ChatInputCommandInteraction,
     InteractionEditReplyOptions,
     InteractionReplyOptions,
     JSONEncodable,
@@ -22,6 +23,13 @@ export type CommandReplyComponent = NonNullable<
 export type CommandReplyFile = NonNullable<
     InteractionReplyOptions["files"]
 >[number];
+
+/**
+ * Any modal payload accepted by Discord.js interaction responses.
+ */
+export type CommandModalPayload = Parameters<
+    ChatInputCommandInteraction["showModal"]
+>[0];
 
 interface BaseReplyOptions {
     /**
