@@ -1,4 +1,4 @@
-import type { APIEmbed, InteractionEditReplyOptions, InteractionReplyOptions, JSONEncodable, MessageEditOptions, MessageMentionOptions, MessageReplyOptions } from "discord.js";
+import type { APIEmbed, ChatInputCommandInteraction, InteractionEditReplyOptions, InteractionReplyOptions, JSONEncodable, MessageEditOptions, MessageMentionOptions, MessageReplyOptions } from "discord.js";
 /**
  * Any top-level message component accepted by Discord.js.
  */
@@ -7,6 +7,10 @@ export type CommandReplyComponent = NonNullable<InteractionReplyOptions["compone
  * Any uploaded file accepted by Discord.js interaction replies.
  */
 export type CommandReplyFile = NonNullable<InteractionReplyOptions["files"]>[number];
+/**
+ * Any modal payload accepted by Discord.js interaction responses.
+ */
+export type CommandModalPayload = Parameters<ChatInputCommandInteraction["showModal"]>[0];
 interface BaseReplyOptions {
     /**
      * Applies MessageFlags.Ephemeral to interaction replies.

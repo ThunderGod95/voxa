@@ -1,7 +1,7 @@
 import type { ChatInputCommandInteraction, Guild, GuildMember, Message, User } from "discord.js";
 import { type CommandFeedbackRenderer } from "./feedback";
 import { type CommandLogger } from "./logger";
-import type { CommandReplyPayload } from "./reply";
+import type { CommandModalPayload, CommandReplyPayload } from "./reply";
 import { type CommandChannel, type CommandClient, type CommandInvocationKind, type CommandLocale, type CommandPayload } from "./source";
 export interface CommandContextOptions {
     logger?: CommandLogger;
@@ -130,6 +130,13 @@ export declare class CommandContext<Arguments extends object = Record<string, ne
     editReply(payload: CommandReplyPayload): Promise<Message>;
     reply(payload: CommandReplyPayload): Promise<Message>;
     followUp(payload: CommandReplyPayload): Promise<Message>;
+    /**
+     * Shows a modal as the initial response to an interaction.
+     *
+     * Throws for message commands or when the interaction has already been
+     * acknowledged.
+     */
+    showModal(modal: CommandModalPayload): Promise<void>;
     replyError(message: string): Promise<Message>;
     replySuccess(message: string): Promise<Message>;
 }

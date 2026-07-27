@@ -1,5 +1,6 @@
 import type { ButtonBuilder, JSONEncodable, MessageActionRowComponentBuilder } from "discord.js";
-import { ActionRowBuilder, ChannelSelectMenuBuilder, MentionableSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, UserSelectMenuBuilder } from "discord.js";
+import { ActionRowBuilder } from "discord.js";
+import { type ChannelSelectInput, type MentionableSelectInput, type RoleSelectInput, type StringSelectInput, type UserSelectInput } from "./inputs";
 import { type BuilderConfigurer } from "./internal";
 import { type ButtonOptions, type LinkButtonOptions, type PremiumButtonOptions } from "./primitives";
 export type MessageActionRowBuilder = ActionRowBuilder<MessageActionRowComponentBuilder>;
@@ -30,15 +31,15 @@ export declare class V2ActionRowBuilder implements JSONEncodable<ActionRowJSON> 
     /** Adds a premium SKU button. */
     premiumButton(input: ButtonBuilder | PremiumButtonOptions): this;
     /** Adds a string select menu. */
-    stringSelect(input: StringSelectMenuBuilder | BuilderConfigurer<StringSelectMenuBuilder>): this;
+    stringSelect(input: StringSelectInput): this;
     /** Adds a user select menu. */
-    userSelect(input: UserSelectMenuBuilder | BuilderConfigurer<UserSelectMenuBuilder>): this;
+    userSelect(input: UserSelectInput): this;
     /** Adds a role select menu. */
-    roleSelect(input: RoleSelectMenuBuilder | BuilderConfigurer<RoleSelectMenuBuilder>): this;
+    roleSelect(input: RoleSelectInput): this;
     /** Adds a mentionable select menu. */
-    mentionableSelect(input: MentionableSelectMenuBuilder | BuilderConfigurer<MentionableSelectMenuBuilder>): this;
+    mentionableSelect(input: MentionableSelectInput): this;
     /** Adds a channel select menu. */
-    channelSelect(input: ChannelSelectMenuBuilder | BuilderConfigurer<ChannelSelectMenuBuilder>): this;
+    channelSelect(input: ChannelSelectInput): this;
     /**
      * Removes, replaces, or inserts row components.
      *

@@ -27,6 +27,12 @@ class InteractionCommandResponder {
         }
         return this.interaction.followUp(toInteractionReplyOptions(payload));
     }
+    async showModal(modal) {
+        if (this.interaction.deferred || this.interaction.replied) {
+            throw new Error("Cannot show a modal after the interaction has been acknowledged.");
+        }
+        await this.interaction.showModal(modal);
+    }
 }
 class MessageCommandResponder {
     message;
@@ -55,6 +61,9 @@ class MessageCommandResponder {
     }
     followUp(payload) {
         return this.message.reply(toMessageReplyOptions(payload));
+    }
+    async showModal(_modal) {
+        throw new Error("Modals can only be shown in response to Discord interactions.");
     }
 }
 export function createCommandResponder(source, logger) {

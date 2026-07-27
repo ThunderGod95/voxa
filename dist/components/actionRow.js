@@ -1,4 +1,5 @@
-import { ActionRowBuilder, ChannelSelectMenuBuilder, MentionableSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, UserSelectMenuBuilder, } from "discord.js";
+import { ActionRowBuilder } from "discord.js";
+import { channelSelect as createChannelSelect, mentionableSelect as createMentionableSelect, roleSelect as createRoleSelect, stringSelect as createStringSelect, userSelect as createUserSelect, } from "./inputs";
 import { configureBuilder } from "./internal";
 import { button as createButton, linkButton as createLinkButton, premiumButton as createPremiumButton, } from "./primitives";
 /**
@@ -44,42 +45,27 @@ export class V2ActionRowBuilder {
     }
     /** Adds a string select menu. */
     stringSelect(input) {
-        const component = input instanceof StringSelectMenuBuilder
-            ? input
-            : configureBuilder(new StringSelectMenuBuilder(), input);
-        this.builder.addComponents(component);
+        this.builder.addComponents(createStringSelect(input));
         return this;
     }
     /** Adds a user select menu. */
     userSelect(input) {
-        const component = input instanceof UserSelectMenuBuilder
-            ? input
-            : configureBuilder(new UserSelectMenuBuilder(), input);
-        this.builder.addComponents(component);
+        this.builder.addComponents(createUserSelect(input));
         return this;
     }
     /** Adds a role select menu. */
     roleSelect(input) {
-        const component = input instanceof RoleSelectMenuBuilder
-            ? input
-            : configureBuilder(new RoleSelectMenuBuilder(), input);
-        this.builder.addComponents(component);
+        this.builder.addComponents(createRoleSelect(input));
         return this;
     }
     /** Adds a mentionable select menu. */
     mentionableSelect(input) {
-        const component = input instanceof MentionableSelectMenuBuilder
-            ? input
-            : configureBuilder(new MentionableSelectMenuBuilder(), input);
-        this.builder.addComponents(component);
+        this.builder.addComponents(createMentionableSelect(input));
         return this;
     }
     /** Adds a channel select menu. */
     channelSelect(input) {
-        const component = input instanceof ChannelSelectMenuBuilder
-            ? input
-            : configureBuilder(new ChannelSelectMenuBuilder(), input);
-        this.builder.addComponents(component);
+        this.builder.addComponents(createChannelSelect(input));
         return this;
     }
     /**
