@@ -3,8 +3,25 @@ import type {
     Guild,
     GuildMember,
     Message,
+    MessageCollector,
+    MessageComponentType,
+    ModalSubmitInteraction,
     User,
 } from "discord.js";
+import {
+    awaitCommandComponent,
+    awaitCommandMessage,
+    awaitCommandModal,
+    type CommandAwaitComponentOptions,
+    type CommandAwaitMessageOptions,
+    type CommandAwaitModalOptions,
+    type CommandComponentCollector,
+    type CommandComponentCollectorOptions,
+    type CommandComponentInteraction,
+    type CommandMessageCollectorOptions,
+    createCommandComponentCollector,
+    createCommandMessageCollector,
+} from "./collectors";
 import {
     type CommandFeedbackRenderer,
     defaultCommandFeedbackRenderer,
@@ -260,6 +277,78 @@ export class CommandContext<Arguments extends object = Record<string, never>> {
      */
     public showModal(modal: CommandModalPayload): Promise<void> {
         return this.responder.showModal(modal);
+    }
+
+    /**
+     * Awaits one component interaction on a specific message.
+     *
+     * By default, only interactions from the command's invoking user are
+     * accepted.
+     */
+    public awaitComponent<
+        const ComponentType extends MessageComponentType,
+        InGuild extends boolean,
+    >(
+        message: Message<InGuild>,
+        options: CommandAwaitComponentOptions<ComponentType, InGuild>,
+    ): Promise<CommandComponentInteraction<ComponentType, InGuild>> {
+        return awaitCommandComponent(message, this.userId, options);
+    }
+
+    /**
+     * Creates a native Discord.js component collector on a specific message.
+     *
+     * By default, only interactions from the command's invoking user are
+     * accepted.
+     */
+    public createComponentCollector<
+        const ComponentType extends MessageComponentType,
+        InGuild extends boolean,
+    >(
+        message: Message<InGuild>,
+        options: CommandComponentCollectorOptions<ComponentType, InGuild>,
+    ): CommandComponentCollector<ComponentType, InGuild> {
+        return createCommandComponentCollector(message, this.userId, options);
+    }
+
+    /**
+     * Awaits one message in the command channel.
+     *
+     * By default, only messages from the command's invoking user are accepted.
+     */
+    public awaitMessage(
+        options: CommandAwaitMessageOptions = {},
+    ): Promise<Message> {
+        return awaitCommandMessage(this.channel, this.userId, options);
+    }
+
+    /**
+     * Creates a native Discord.js message collector in the command channel.
+     *
+     * By default, only messages from the command's invoking user are accepted.
+     */
+    public createMessageCollector(
+        options: CommandMessageCollectorOptions = {},
+    ): MessageCollector {
+        return createCommandMessageCollector(
+            this.channel,
+            this.userId,
+            options,
+        );
+    }
+
+    /**
+     * Awaits one modal submission.
+     *
+     * By default, only submissions from the command's invoking user are
+     * accepted.
+     *
+     * Throws when used by a message command.
+     */
+    public awaitModal(
+        options: CommandAwaitModalOptions,
+    ): Promise<ModalSubmitInteraction> {
+        return awaitCommandModal(this.interaction, this.userId, options);
     }
 
     public replyError(message: string): Promise<Message> {
