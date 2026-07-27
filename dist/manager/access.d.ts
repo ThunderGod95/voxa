@@ -1,4 +1,4 @@
-import type { PermissionResolvable } from "discord.js";
+import type { AutocompleteInteraction, PermissionResolvable } from "discord.js";
 import type { CommandContext } from "../context";
 import type { CommandHandlerConfig } from "./command";
 import type { CommandRoute } from "./route";
@@ -59,6 +59,7 @@ export declare class CommandAccessController {
      * @param context - Context used to inspect the invocation and send errors.
      */
     checkRoute(route: CommandRoute, context: CommandContext<Record<string, never>>): Promise<boolean>;
+    checkAutocompleteRoute(route: CommandRoute, interaction: AutocompleteInteraction): boolean;
 }
 export {};
 //# sourceMappingURL=access.d.ts.map

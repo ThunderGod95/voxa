@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { formatArgumentUsage, parseInteractionArguments, parseMessageArguments, tokenizeArguments, } from "../arguments";
+import { formatArgumentUsage, parseInteractionArguments, parseMessageArguments, respondToArgumentAutocomplete, tokenizeArguments, } from "../arguments";
 import { CommandContext, defaultCommandFeedbackRenderer, defaultCommandLogger, } from "../context";
 import { CommandAccessController, isSlashRouteEnabled } from "./access";
 import { EMPTY_ARGUMENTS, } from "./command";
@@ -155,31 +155,26 @@ export class CommandManager extends EventEmitter {
         return this.executeCommand(route, this.createContext(message, parsed.value));
     }
     /**
-     * Handles a Discord chat-input interaction as a possible slash command.
+     * Handles supported Discord command interactions.
      *
-     * Pass chat-input interactions from `interactionCreate` to this method.
-     *
-     * The returned value is `true` only when a registered slash route completes
-     * successfully.
-     *
-     * @param interaction - Chat-input interaction to process.
+     * Chat-input interactions execute commands. Autocomplete interactions are
+     * routed to the focused argument's autocomplete handler.
      */
     async handleInteraction(interaction) {
+        if (interaction.isAutocomplete()) {
+            return this.handleAutocompleteInteraction(interaction);
+        }
         if (!interaction.isChatInputCommand()) {
             return false;
         }
+        return this.handleChatInputInteraction(interaction);
+    }
+    async handleChatInputInteraction(interaction) {
         if (!this.accessController.canProcessUser(interaction.user.id, interaction.user.bot)) {
             return false;
         }
-        const subcommandGroup = interaction.options.getSubcommandGroup(false);
-        const subcommand = interaction.options.getSubcommand(false);
-        const path = [
-            interaction.commandName,
-            ...(subcommandGroup ? [subcommandGroup] : []),
-            ...(subcommand ? [subcommand] : []),
-        ];
-        const route = this.registry.getCanonical(path);
-        if (!route || !isSlashRouteEnabled(route)) {
+        const route = this.resolveInteractionRoute(interaction);
+        if (!route) {
             return false;
         }
         const baseContext = this.createContext(interaction, {});
@@ -192,6 +187,44 @@ export class CommandManager extends EventEmitter {
             return false;
         }
         return this.executeCommand(route, this.createContext(interaction, parsed.value));
+    }
+    async handleAutocompleteInteraction(interaction) {
+        if (!this.accessController.canProcessUser(interaction.user.id, interaction.user.bot)) {
+            await interaction.respond([]).catch(() => { });
+            return false;
+        }
+        const route = this.resolveInteractionRoute(interaction);
+        if (!route) {
+            await interaction.respond([]).catch(() => { });
+            return false;
+        }
+        if (!this.accessController.checkAutocompleteRoute(route, interaction)) {
+            await interaction.respond([]).catch(() => { });
+            return false;
+        }
+        try {
+            const handled = await respondToArgumentAutocomplete(route.command.arguments ?? EMPTY_ARGUMENTS, interaction);
+            if (!handled) {
+                await interaction.respond([]);
+            }
+            return handled;
+        }
+        catch (error) {
+            this.config.logger.error(`Error autocompleting ${route.path.join(" ")}:`, error);
+            await interaction.respond([]).catch(() => { });
+            return false;
+        }
+    }
+    resolveInteractionRoute(interaction) {
+        const subcommandGroup = interaction.options.getSubcommandGroup(false);
+        const subcommand = interaction.options.getSubcommand(false);
+        const path = [
+            interaction.commandName,
+            ...(subcommandGroup ? [subcommandGroup] : []),
+            ...(subcommand ? [subcommand] : []),
+        ];
+        const route = this.registry.getCanonical(path);
+        return route && isSlashRouteEnabled(route) ? route : null;
     }
     resolvePrefix(message) {
         const prefix = this.config.prefix;

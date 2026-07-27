@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { formatArgumentChoiceValues, getArgumentChoiceValues } from "./choices";
 import { parseNaturalTime } from "./timeParser";
 import { resolveTimezone } from "./timezoneParser";
 function requiredValue(required) {
@@ -9,6 +10,16 @@ function restValue(rest) {
 }
 function applyRequired(schema, required) {
     return (required ? schema : schema.nullable());
+}
+function applyChoices(schema, choices) {
+    if (choices === undefined) {
+        return schema;
+    }
+    const values = getArgumentChoiceValues(choices);
+    const allowedValues = new Set(values);
+    return schema.refine((value) => allowedValues.has(value), {
+        message: `Must be one of: ${formatArgumentChoiceValues(values)}.`,
+    });
 }
 /**
  * Factory object for creating strongly-typed command argument definitions.
@@ -29,8 +40,9 @@ export const argument = {
                 message: `Cannot contain more than ${options.maxLength} characters.`,
             });
         }
+        const choiceSchema = applyChoices(schema, options.choices);
         const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
+        const finalSchema = applyRequired(choiceSchema, isRequired);
         return {
             type: "string",
             description: options.description,
@@ -38,6 +50,8 @@ export const argument = {
             rest: restValue(options.rest),
             minLength: options.minLength,
             maxLength: options.maxLength,
+            choices: options.choices,
+            autocomplete: options.autocomplete,
             _schema: finalSchema,
         };
     },
@@ -56,16 +70,18 @@ export const argument = {
                 message: `Cannot be more than ${options.max}.`,
             });
         }
-        const schema = z.preprocess((val) => {
-            if (typeof val === "number")
-                return val;
-            if (typeof val === "string" && /^[+-]?\d+$/u.test(val.trim())) {
-                return Number(val);
+        const schema = z.preprocess((value) => {
+            if (typeof value === "number") {
+                return value;
             }
-            return val;
+            if (typeof value === "string" && /^[+-]?\d+$/u.test(value.trim())) {
+                return Number(value);
+            }
+            return value;
         }, numberSchema);
+        const choiceSchema = applyChoices(schema, options.choices);
         const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
+        const finalSchema = applyRequired(choiceSchema, isRequired);
         return {
             type: "integer",
             description: options.description,
@@ -73,6 +89,8 @@ export const argument = {
             rest: restValue(options.rest),
             min: options.min,
             max: options.max,
+            choices: options.choices,
+            autocomplete: options.autocomplete,
             _schema: finalSchema,
         };
     },
@@ -91,18 +109,21 @@ export const argument = {
                 message: `Cannot be more than ${options.max}.`,
             });
         }
-        const schema = z.preprocess((val) => {
-            if (typeof val === "number")
-                return val;
-            if (typeof val === "string" && val.trim().length > 0) {
-                const parsed = Number(val);
-                if (!Number.isNaN(parsed))
-                    return parsed;
+        const schema = z.preprocess((value) => {
+            if (typeof value === "number") {
+                return value;
             }
-            return val;
+            if (typeof value === "string" && value.trim().length > 0) {
+                const parsed = Number(value);
+                if (!Number.isNaN(parsed)) {
+                    return parsed;
+                }
+            }
+            return value;
         }, numberSchema);
+        const choiceSchema = applyChoices(schema, options.choices);
         const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
+        const finalSchema = applyRequired(choiceSchema, isRequired);
         return {
             type: "number",
             description: options.description,
@@ -110,6 +131,8 @@ export const argument = {
             rest: restValue(options.rest),
             min: options.min,
             max: options.max,
+            choices: options.choices,
+            autocomplete: options.autocomplete,
             _schema: finalSchema,
         };
     },
@@ -208,6 +231,7 @@ export const argument = {
             pattern: options.pattern,
             hostname: options.hostname,
             protocol: options.protocol,
+            autocomplete: options.autocomplete,
             _schema: finalSchema,
         };
     },
@@ -235,6 +259,7 @@ export const argument = {
             description: options.description,
             required: isRequired,
             rest: restValue(options.rest),
+            autocomplete: options.autocomplete,
             _schema: finalSchema,
         };
     },
@@ -282,6 +307,7 @@ export const argument = {
             timezone,
             forwardDate,
             strict,
+            autocomplete: options.autocomplete,
             _schema: finalSchema,
         };
     },

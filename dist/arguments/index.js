@@ -1,4 +1,6 @@
+export * from "./autocomplete";
 export * from "./builder";
+export * from "./choices";
 export * from "./interactionParser";
 export * from "./messageParser";
 export * from "./timeParser";

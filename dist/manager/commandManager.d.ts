@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { ChatInputCommandInteraction, Collection, Message } from "discord.js";
+import type { BaseInteraction, Collection, Message } from "discord.js";
 import { type ArgumentSchema, type ParsedArguments } from "../arguments";
 import { CommandContext } from "../context";
 import { type AnyCommand, type CommandHandlerConfig } from "./command";
@@ -120,16 +120,15 @@ export declare class CommandManager extends EventEmitter {
      */
     handleMessage(message: Message): Promise<boolean>;
     /**
-     * Handles a Discord chat-input interaction as a possible slash command.
+     * Handles supported Discord command interactions.
      *
-     * Pass chat-input interactions from `interactionCreate` to this method.
-     *
-     * The returned value is `true` only when a registered slash route completes
-     * successfully.
-     *
-     * @param interaction - Chat-input interaction to process.
+     * Chat-input interactions execute commands. Autocomplete interactions are
+     * routed to the focused argument's autocomplete handler.
      */
-    handleInteraction(interaction: ChatInputCommandInteraction): Promise<boolean>;
+    handleInteraction(interaction: BaseInteraction): Promise<boolean>;
+    private handleChatInputInteraction;
+    private handleAutocompleteInteraction;
+    private resolveInteractionRoute;
     private resolvePrefix;
     private createContext;
     private executeCommand;

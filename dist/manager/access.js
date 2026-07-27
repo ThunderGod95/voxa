@@ -124,5 +124,30 @@ export class CommandAccessController {
         }
         return true;
     }
+    checkAutocompleteRoute(route, interaction) {
+        const access = getEffectiveCommandAccess(route);
+        if (access.devOnly && !this.isDeveloper(interaction.user.id)) {
+            return false;
+        }
+        if (access.guildOnly && !interaction.inGuild()) {
+            return false;
+        }
+        if (!interaction.inGuild()) {
+            return true;
+        }
+        if (access.userPermissions.length > 0 &&
+            (!interaction.memberPermissions ||
+                interaction.memberPermissions.missing(access.userPermissions)
+                    .length > 0)) {
+            return false;
+        }
+        if (access.botPermissions.length > 0 &&
+            (!interaction.appPermissions ||
+                interaction.appPermissions.missing(access.botPermissions)
+                    .length > 0)) {
+            return false;
+        }
+        return true;
+    }
 }
 //# sourceMappingURL=access.js.map
