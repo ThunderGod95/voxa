@@ -1,479 +1,420 @@
-import type { GuildMember, Role, User } from "discord.js";
-import { z } from "zod";
-import { formatArgumentChoiceValues, getArgumentChoiceValues } from "./choices";
-import { parseNaturalTime } from "./timeParser";
-import { resolveTimezone } from "./timezoneParser";
 import type {
-    ArgumentChoices,
-    ArgumentChoiceValue,
-    BooleanArgumentDefinition,
-    BooleanArgumentOptions,
-    InferArgumentChoiceValue,
-    IntegerArgumentDefinition,
-    IntegerArgumentOptions,
-    MemberArgumentDefinition,
-    MemberArgumentOptions,
-    NumberArgumentDefinition,
-    NumberArgumentOptions,
-    RoleArgumentDefinition,
-    RoleArgumentOptions,
-    StringArgumentDefinition,
-    StringArgumentOptions,
-    TimeArgumentDefinition,
-    TimeArgumentOptions,
-    TimezoneArgumentDefinition,
-    TimezoneArgumentOptions,
-    UrlArgumentDefinition,
-    UrlArgumentOptions,
-    UserArgumentDefinition,
-    UserArgumentOptions,
+	ArgumentChoices,
+	ArgumentValueDefinition,
+	BooleanArgumentDefinition,
+	BooleanArgumentOptions,
+	BooleanOptionDefinition,
+	BooleanOptionOptions,
+	InferArgumentChoiceValue,
+	IntegerArgumentDefinition,
+	IntegerArgumentOptions,
+	IntegerOptionDefinition,
+	IntegerOptionOptions,
+	MemberArgumentDefinition,
+	MemberArgumentOptions,
+	MemberOptionDefinition,
+	MemberOptionOptions,
+	NamedInputOptions,
+	NamedOptionDefinition,
+	NumberArgumentDefinition,
+	NumberArgumentOptions,
+	NumberOptionDefinition,
+	NumberOptionOptions,
+	PositionalArgumentDefinition,
+	PositionalInputOptions,
+	RoleArgumentDefinition,
+	RoleArgumentOptions,
+	RoleOptionDefinition,
+	RoleOptionOptions,
+	ScalarValueDefinition,
+	StringArgumentDefinition,
+	StringArgumentOptions,
+	StringOptionDefinition,
+	StringOptionOptions,
+	TimeArgumentDefinition,
+	TimeArgumentOptions,
+	TimeOptionDefinition,
+	TimeOptionOptions,
+	TimezoneArgumentDefinition,
+	TimezoneArgumentOptions,
+	TimezoneOptionDefinition,
+	TimezoneOptionOptions,
+	UnionArgumentDefinition,
+	UnionArgumentOptions,
+	UnionOptionDefinition,
+	UnionOptionOptions,
+	UrlArgumentDefinition,
+	UrlArgumentOptions,
+	UrlOptionDefinition,
+	UrlOptionOptions,
+	UserArgumentDefinition,
+	UserArgumentOptions,
+	UserOptionDefinition,
+	UserOptionOptions,
 } from "./types";
+import { value } from "./value";
 
-function requiredValue<Required extends boolean>(
-    required: Required | undefined,
+function resolveRequired<Required extends boolean>(
+	required: Required | undefined,
 ): Required {
-    return (required ?? false) as Required;
+	return (required ?? false) as Required;
 }
 
-function restValue(rest: boolean | undefined): boolean {
-    return rest ?? false;
+function getChoices<
+	Value extends string | number,
+	Choices extends ArgumentChoices<Value> | undefined,
+>(choices: ArgumentChoices<Value> | undefined): Choices | undefined {
+	return choices as Choices | undefined;
 }
 
-function applyRequired<Output, Required extends boolean>(
-    schema: z.ZodType<Output>,
-    required: Required,
-): z.ZodType<Required extends true ? Output : Output | null> {
-    return (required ? schema : schema.nullable()) as z.ZodType<
-        Required extends true ? Output : Output | null
-    >;
+function createPositionalDefinition<
+	Value extends ArgumentValueDefinition,
+	Required extends boolean,
+>(
+	valueDefinition: Value,
+	options: PositionalInputOptions<Required> & {
+		autocomplete?: PositionalArgumentDefinition<
+			Value,
+			Required
+		>["autocomplete"];
+	},
+): PositionalArgumentDefinition<Value, Required> {
+	return {
+		placement: "positional",
+		description: options.description,
+		required: resolveRequired(options.required),
+		rest: options.rest ?? false,
+		value: valueDefinition,
+		autocomplete: options.autocomplete,
+	};
 }
 
-function applyChoices<Value extends ArgumentChoiceValue>(
-    schema: z.ZodType<Value>,
-    choices: ArgumentChoices<Value> | undefined,
-): z.ZodType<Value> {
-    if (choices === undefined) {
-        return schema;
-    }
-
-    const values = getArgumentChoiceValues(choices);
-    const allowedValues = new Set<Value>(values);
-
-    return schema.refine((value) => allowedValues.has(value), {
-        message: `Must be one of: ${formatArgumentChoiceValues(values)}.`,
-    });
+function createNamedDefinition<
+	Value extends ArgumentValueDefinition,
+	Required extends boolean,
+>(
+	valueDefinition: Value,
+	options: NamedInputOptions<Required> & {
+		autocomplete?: NamedOptionDefinition<Value, Required>["autocomplete"];
+	},
+): NamedOptionDefinition<Value, Required> {
+	return {
+		placement: "option",
+		description: options.description,
+		required: resolveRequired(options.required),
+		short: options.short,
+		longAliases: options.longAliases ?? [],
+		value: valueDefinition,
+		autocomplete: options.autocomplete,
+	};
 }
 
 /**
- * Factory object for creating strongly-typed command argument definitions.
+ * Factory for positional command arguments.
+ *
+ * Positional placement only affects message commands. Discord application
+ * command options are always named.
  */
 export const argument = {
-    /** Constructs a string argument definition. */
-    string<
-        const Required extends boolean = false,
-        const Choices extends ArgumentChoices<string> | undefined = undefined,
-    >(
-        options: StringArgumentOptions<Required, Choices>,
-    ): StringArgumentDefinition<
-        Required,
-        InferArgumentChoiceValue<Choices, string>
-    > {
-        let schema = z.string({
-            error: "Must be a string.",
-        });
+	/** Constructs a positional string argument. */
+	string<
+		const Required extends boolean = false,
+		const Choices extends ArgumentChoices<string> | undefined = undefined,
+	>(
+		options: StringArgumentOptions<Required, Choices>,
+	): StringArgumentDefinition<
+		Required,
+		InferArgumentChoiceValue<Choices, string>
+	> {
+		const valueDefinition = value.string<Choices>({
+			minLength: options.minLength,
+			maxLength: options.maxLength,
+			choices: getChoices<string, Choices>(options.choices),
+			aliases: options.aliases,
+		});
 
-        if (options.minLength !== undefined) {
-            schema = schema.min(options.minLength, {
-                message: `Must contain at least ${options.minLength} characters.`,
-            });
-        }
+		return createPositionalDefinition(valueDefinition, options);
+	},
 
-        if (options.maxLength !== undefined) {
-            schema = schema.max(options.maxLength, {
-                message: `Cannot contain more than ${options.maxLength} characters.`,
-            });
-        }
+	/** Constructs a positional integer argument. */
+	integer<
+		const Required extends boolean = false,
+		const Choices extends ArgumentChoices<number> | undefined = undefined,
+	>(
+		options: IntegerArgumentOptions<Required, Choices>,
+	): IntegerArgumentDefinition<
+		Required,
+		InferArgumentChoiceValue<Choices, number>
+	> {
+		const valueDefinition = value.integer<Choices>({
+			min: options.min,
+			max: options.max,
+			choices: getChoices<number, Choices>(options.choices),
+		});
 
-        type Output = InferArgumentChoiceValue<Choices, string>;
+		return createPositionalDefinition(valueDefinition, options);
+	},
 
-        const choiceSchema = applyChoices(
-            schema,
-            options.choices,
-        ) as z.ZodType<Output>;
+	/** Constructs a positional number argument. */
+	number<
+		const Required extends boolean = false,
+		const Choices extends ArgumentChoices<number> | undefined = undefined,
+	>(
+		options: NumberArgumentOptions<Required, Choices>,
+	): NumberArgumentDefinition<
+		Required,
+		InferArgumentChoiceValue<Choices, number>
+	> {
+		const valueDefinition = value.number<Choices>({
+			min: options.min,
+			max: options.max,
+			choices: getChoices<number, Choices>(options.choices),
+		});
 
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(choiceSchema, isRequired);
+		return createPositionalDefinition(valueDefinition, options);
+	},
 
-        return {
-            type: "string",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            minLength: options.minLength,
-            maxLength: options.maxLength,
-            choices: options.choices,
-            aliases: options.aliases,
-            autocomplete: options.autocomplete,
-            _schema: finalSchema,
-        };
-    },
+	/** Constructs a positional boolean argument. */
+	boolean<const Required extends boolean = false>(
+		options: BooleanArgumentOptions<Required>,
+	): BooleanArgumentDefinition<Required> {
+		return createPositionalDefinition(value.boolean(), options);
+	},
 
-    /** Constructs an integer argument definition. Input is coerced automatically. */
-    integer<
-        const Required extends boolean = false,
-        const Choices extends ArgumentChoices<number> | undefined = undefined,
-    >(
-        options: IntegerArgumentOptions<Required, Choices>,
-    ): IntegerArgumentDefinition<
-        Required,
-        InferArgumentChoiceValue<Choices, number>
-    > {
-        let numberSchema = z
-            .number({ error: "Must be a valid number." })
-            .int({ message: "Must be a whole number." });
+	/** Constructs a positional Discord user argument. */
+	user<const Required extends boolean = false>(
+		options: UserArgumentOptions<Required>,
+	): UserArgumentDefinition<Required> {
+		return createPositionalDefinition(value.user(), options);
+	},
 
-        if (options.min !== undefined) {
-            numberSchema = numberSchema.min(options.min, {
-                message: `Must be at least ${options.min}.`,
-            });
-        }
+	/** Constructs a positional Discord guild-member argument. */
+	member<const Required extends boolean = false>(
+		options: MemberArgumentOptions<Required>,
+	): MemberArgumentDefinition<Required> {
+		return createPositionalDefinition(value.member(), options);
+	},
 
-        if (options.max !== undefined) {
-            numberSchema = numberSchema.max(options.max, {
-                message: `Cannot be more than ${options.max}.`,
-            });
-        }
+	/** Constructs a positional Discord role argument. */
+	role<const Required extends boolean = false>(
+		options: RoleArgumentOptions<Required>,
+	): RoleArgumentDefinition<Required> {
+		return createPositionalDefinition(
+			value.role({
+				allowedRoleIds: options.allowedRoleIds,
+			}),
+			options,
+		);
+	},
 
-        const schema = z.preprocess((value) => {
-            if (typeof value === "number") {
-                return value;
-            }
+	/** Constructs a positional URL argument. */
+	url<const Required extends boolean = false>(
+		options: UrlArgumentOptions<Required>,
+	): UrlArgumentDefinition<Required> {
+		return createPositionalDefinition(
+			value.url({
+				pattern: options.pattern,
+				hostname: options.hostname,
+				protocol: options.protocol,
+			}),
+			options,
+		);
+	},
 
-            if (typeof value === "string" && /^[+-]?\d+$/u.test(value.trim())) {
-                return Number(value);
-            }
+	/** Constructs a positional timezone argument. */
+	timezone<const Required extends boolean = false>(
+		options: TimezoneArgumentOptions<Required>,
+	): TimezoneArgumentDefinition<Required> {
+		return createPositionalDefinition(value.timezone(), options);
+	},
 
-            return value;
-        }, numberSchema);
+	/** Constructs a positional natural-language time argument. */
+	time<const Required extends boolean = false>(
+		options: TimeArgumentOptions<Required>,
+	): TimeArgumentDefinition<Required> {
+		return createPositionalDefinition(
+			value.time({
+				reference: options.reference,
+				timezone: options.timezone,
+				forwardDate: options.forwardDate,
+				strict: options.strict,
+			}),
+			options,
+		);
+	},
 
-        type Output = InferArgumentChoiceValue<Choices, number>;
+	/**
+	 * Constructs a positional union argument.
+	 *
+	 * Message commands try variants in declaration order.
+	 */
+	union<
+		const Required extends boolean = false,
+		const Variants extends
+			readonly ScalarValueDefinition[] = readonly ScalarValueDefinition[],
+	>(
+		options: UnionArgumentOptions<Required, Variants>,
+	): UnionArgumentDefinition<Required, Variants> {
+		return createPositionalDefinition(
+			value.union(options.variants, {
+				slashVariant: options.slashVariant,
+			}),
+			options,
+		);
+	},
+};
 
-        const choiceSchema = applyChoices(
-            schema,
-            options.choices,
-        ) as z.ZodType<Output>;
+/**
+ * Factory for named message-command options.
+ *
+ * Named options support the preferred `name:value` syntax and GNU-style
+ * `--name value`, `--name=value`, and short aliases.
+ */
+export const option = {
+	/** Constructs a named string option. */
+	string<
+		const Required extends boolean = false,
+		const Choices extends ArgumentChoices<string> | undefined = undefined,
+	>(
+		options: StringOptionOptions<Required, Choices>,
+	): StringOptionDefinition<
+		Required,
+		InferArgumentChoiceValue<Choices, string>
+	> {
+		const valueDefinition = value.string<Choices>({
+			minLength: options.minLength,
+			maxLength: options.maxLength,
+			choices: getChoices<string, Choices>(options.choices),
+			aliases: options.aliases,
+		});
 
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(choiceSchema, isRequired);
+		return createNamedDefinition(valueDefinition, options);
+	},
 
-        return {
-            type: "integer",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            min: options.min,
-            max: options.max,
-            choices: options.choices,
-            autocomplete: options.autocomplete,
-            _schema: finalSchema,
-        };
-    },
+	/** Constructs a named integer option. */
+	integer<
+		const Required extends boolean = false,
+		const Choices extends ArgumentChoices<number> | undefined = undefined,
+	>(
+		options: IntegerOptionOptions<Required, Choices>,
+	): IntegerOptionDefinition<
+		Required,
+		InferArgumentChoiceValue<Choices, number>
+	> {
+		const valueDefinition = value.integer<Choices>({
+			min: options.min,
+			max: options.max,
+			choices: getChoices<number, Choices>(options.choices),
+		});
 
-    /** Constructs a floating-point number argument definition. */
-    number<
-        const Required extends boolean = false,
-        const Choices extends ArgumentChoices<number> | undefined = undefined,
-    >(
-        options: NumberArgumentOptions<Required, Choices>,
-    ): NumberArgumentDefinition<
-        Required,
-        InferArgumentChoiceValue<Choices, number>
-    > {
-        let numberSchema = z.number({
-            error: "Must be a valid number.",
-        });
+		return createNamedDefinition(valueDefinition, options);
+	},
 
-        if (options.min !== undefined) {
-            numberSchema = numberSchema.min(options.min, {
-                message: `Must be at least ${options.min}.`,
-            });
-        }
+	/** Constructs a named number option. */
+	number<
+		const Required extends boolean = false,
+		const Choices extends ArgumentChoices<number> | undefined = undefined,
+	>(
+		options: NumberOptionOptions<Required, Choices>,
+	): NumberOptionDefinition<
+		Required,
+		InferArgumentChoiceValue<Choices, number>
+	> {
+		const valueDefinition = value.number<Choices>({
+			min: options.min,
+			max: options.max,
+			choices: getChoices<number, Choices>(options.choices),
+		});
 
-        if (options.max !== undefined) {
-            numberSchema = numberSchema.max(options.max, {
-                message: `Cannot be more than ${options.max}.`,
-            });
-        }
+		return createNamedDefinition(valueDefinition, options);
+	},
 
-        const schema = z.preprocess((value) => {
-            if (typeof value === "number") {
-                return value;
-            }
+	/** Constructs a named boolean option. */
+	boolean<const Required extends boolean = false>(
+		options: BooleanOptionOptions<Required>,
+	): BooleanOptionDefinition<Required> {
+		return createNamedDefinition(value.boolean(), options);
+	},
 
-            if (typeof value === "string" && value.trim().length > 0) {
-                const parsed = Number(value);
+	/** Constructs a named Discord user option. */
+	user<const Required extends boolean = false>(
+		options: UserOptionOptions<Required>,
+	): UserOptionDefinition<Required> {
+		return createNamedDefinition(value.user(), options);
+	},
 
-                if (!Number.isNaN(parsed)) {
-                    return parsed;
-                }
-            }
+	/** Constructs a named Discord guild-member option. */
+	member<const Required extends boolean = false>(
+		options: MemberOptionOptions<Required>,
+	): MemberOptionDefinition<Required> {
+		return createNamedDefinition(value.member(), options);
+	},
 
-            return value;
-        }, numberSchema);
+	/** Constructs a named Discord role option. */
+	role<const Required extends boolean = false>(
+		options: RoleOptionOptions<Required>,
+	): RoleOptionDefinition<Required> {
+		return createNamedDefinition(
+			value.role({
+				allowedRoleIds: options.allowedRoleIds,
+			}),
+			options,
+		);
+	},
 
-        type Output = InferArgumentChoiceValue<Choices, number>;
+	/** Constructs a named URL option. */
+	url<const Required extends boolean = false>(
+		options: UrlOptionOptions<Required>,
+	): UrlOptionDefinition<Required> {
+		return createNamedDefinition(
+			value.url({
+				pattern: options.pattern,
+				hostname: options.hostname,
+				protocol: options.protocol,
+			}),
+			options,
+		);
+	},
 
-        const choiceSchema = applyChoices(
-            schema,
-            options.choices,
-        ) as z.ZodType<Output>;
+	/** Constructs a named timezone option. */
+	timezone<const Required extends boolean = false>(
+		options: TimezoneOptionOptions<Required>,
+	): TimezoneOptionDefinition<Required> {
+		return createNamedDefinition(value.timezone(), options);
+	},
 
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(choiceSchema, isRequired);
+	/** Constructs a named natural-language time option. */
+	time<const Required extends boolean = false>(
+		options: TimeOptionOptions<Required>,
+	): TimeOptionDefinition<Required> {
+		return createNamedDefinition(
+			value.time({
+				reference: options.reference,
+				timezone: options.timezone,
+				forwardDate: options.forwardDate,
+				strict: options.strict,
+			}),
+			options,
+		);
+	},
 
-        return {
-            type: "number",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            min: options.min,
-            max: options.max,
-            choices: options.choices,
-            autocomplete: options.autocomplete,
-            _schema: finalSchema,
-        };
-    },
-
-    /** Constructs a boolean argument. Accepts various truthy/falsy string representations. */
-    boolean<const Required extends boolean = false>(
-        options: BooleanArgumentOptions<Required>,
-    ): BooleanArgumentDefinition<Required> {
-        const trueValues = ["true", "yes", "y", "1", "on", "enable", "enabled"];
-        const falseValues = [
-            "false",
-            "no",
-            "n",
-            "0",
-            "off",
-            "disable",
-            "disabled",
-        ];
-
-        const schema = z.preprocess(
-            (val) => {
-                if (typeof val === "boolean") return val;
-                if (typeof val === "string") {
-                    const normalized = val.toLowerCase().trim();
-                    if (trueValues.includes(normalized)) return true;
-                    if (falseValues.includes(normalized)) return false;
-                }
-                return val;
-            },
-            z.boolean({ error: "Must be true or false." }),
-        );
-
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-
-        return {
-            type: "boolean",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            _schema: finalSchema,
-        };
-    },
-
-    /** Constructs a Discord User argument definition. */
-    user<const Required extends boolean = false>(
-        options: UserArgumentOptions<Required>,
-    ): UserArgumentDefinition<Required> {
-        const schema = z.custom<User>(
-            (val) => val !== null && typeof val === "object" && "id" in val,
-            { message: "Could not resolve a valid user." },
-        );
-
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-
-        return {
-            type: "user",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            _schema: finalSchema,
-        };
-    },
-
-    /** Constructs a Discord GuildMember argument definition. */
-    member<const Required extends boolean = false>(
-        options: MemberArgumentOptions<Required>,
-    ): MemberArgumentDefinition<Required> {
-        const schema = z.custom<GuildMember>(
-            (val) => val !== null && typeof val === "object" && "user" in val,
-            { message: "Could not resolve a valid server member." },
-        );
-
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-
-        return {
-            type: "member",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            _schema: finalSchema,
-        };
-    },
-
-    /** Constructs a Discord Role argument definition. */
-    role<const Required extends boolean = false>(
-        options: RoleArgumentOptions<Required>,
-    ): RoleArgumentDefinition<Required> {
-        const schema = z.custom<Role>(
-            (val) => val !== null && typeof val === "object" && "name" in val,
-            { message: "Could not resolve a valid role." },
-        );
-
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-
-        return {
-            type: "role",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            ...(options.allowedRoleIds !== undefined
-                ? { allowedRoleIds: options.allowedRoleIds }
-                : {}),
-            _schema: finalSchema,
-        };
-    },
-
-    url<const Required extends boolean = false>(
-        options: UrlArgumentOptions<Required>,
-    ): UrlArgumentDefinition<Required> {
-        const schema = z
-            .url({
-                pattern: options.pattern,
-                hostname: options.hostname,
-                protocol: options.protocol,
-                error: "Must be a valid URL.",
-            })
-            .transform((value) => new URL(value));
-
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-
-        return {
-            type: "url",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            pattern: options.pattern,
-            hostname: options.hostname,
-            protocol: options.protocol,
-            autocomplete: options.autocomplete,
-            _schema: finalSchema,
-        };
-    },
-
-    /** Constructs an IANA timezone argument from names, cities, or safe aliases. */
-    timezone<const Required extends boolean = false>(
-        options: TimezoneArgumentOptions<Required>,
-    ): TimezoneArgumentDefinition<Required> {
-        const schema = z
-            .string({
-                error: "Must be a timezone.",
-            })
-            .transform((value, context) => {
-                const timezone = resolveTimezone(value);
-
-                if (!timezone) {
-                    context.addIssue({
-                        code: "custom",
-                        message: "Could not resolve a valid timezone.",
-                    });
-
-                    return z.NEVER;
-                }
-
-                return timezone;
-            });
-
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-
-        return {
-            type: "timezone",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            autocomplete: options.autocomplete,
-            _schema: finalSchema,
-        };
-    },
-
-    /** Constructs a natural-language date/time argument parsed by Chrono. */
-    time<const Required extends boolean = false>(
-        options: TimeArgumentOptions<Required>,
-    ): TimeArgumentDefinition<Required> {
-        const resolvedTimezone = options.timezone
-            ? resolveTimezone(options.timezone)
-            : null;
-
-        if (options.timezone && !resolvedTimezone) {
-            throw new Error(
-                `Invalid time argument timezone: "${options.timezone}".`,
-            );
-        }
-
-        const timezone = resolvedTimezone ?? undefined;
-        const forwardDate = options.forwardDate ?? false;
-        const strict = options.strict ?? false;
-
-        const schema = z
-            .string({
-                error: "Must be a date or time expression.",
-            })
-            .transform((value, context) => {
-                const reference =
-                    typeof options.reference === "function"
-                        ? options.reference()
-                        : options.reference;
-
-                const parsed = parseNaturalTime(value, {
-                    reference,
-                    timezone,
-                    forwardDate,
-                    strict,
-                });
-
-                if (!parsed) {
-                    context.addIssue({
-                        code: "custom",
-                        message: "Could not parse a valid date or time.",
-                    });
-
-                    return z.NEVER;
-                }
-
-                return parsed;
-            });
-
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-
-        return {
-            type: "time",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            timezone,
-            forwardDate,
-            strict,
-            autocomplete: options.autocomplete,
-            _schema: finalSchema,
-        };
-    },
+	/**
+	 * Constructs a named union option.
+	 *
+	 * Message commands try variants in declaration order.
+	 */
+	union<
+		const Required extends boolean = false,
+		const Variants extends
+			readonly ScalarValueDefinition[] = readonly ScalarValueDefinition[],
+	>(
+		options: UnionOptionOptions<Required, Variants>,
+	): UnionOptionDefinition<Required, Variants> {
+		return createNamedDefinition(
+			value.union(options.variants, {
+				slashVariant: options.slashVariant,
+			}),
+			options,
+		);
+	},
 };

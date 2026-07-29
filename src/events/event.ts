@@ -14,29 +14,29 @@ export type ClientEventName = Extract<keyof ClientEvents, string>;
  * @typeParam Name - Discord.js client event handled by this definition.
  */
 export interface EventDefinition<
-    Name extends ClientEventName = ClientEventName,
+	Name extends ClientEventName = ClientEventName,
 > {
-    /**
-     * Discord.js client event to handle.
-     *
-     * Prefer values from Discord.js's `Events` enum.
-     */
-    name: Name;
+	/**
+	 * Discord.js client event to handle.
+	 *
+	 * Prefer values from Discord.js's `Events` enum.
+	 */
+	name: Name;
 
-    /**
-     * Whether the handler should be detached after its first invocation.
-     *
-     * @defaultValue false
-     */
-    once?: boolean;
+	/**
+	 * Whether the handler should be detached after its first invocation.
+	 *
+	 * @defaultValue false
+	 */
+	once?: boolean;
 
-    /**
-     * Handles the Discord.js event.
-     *
-     * Synchronous exceptions and rejected promises are caught and reported by
-     * {@link EventManager}.
-     */
-    execute(...args: ClientEvents[Name]): Promise<void> | void;
+	/**
+	 * Handles the Discord.js event.
+	 *
+	 * Synchronous exceptions and rejected promises are caught and reported by
+	 * {@link EventManager}.
+	 */
+	execute(...args: ClientEvents[Name]): Promise<void> | void;
 }
 
 /**
@@ -64,7 +64,7 @@ export type AnyEventDefinition = EventDefinition<ClientEventName>;
  * ```
  */
 export function defineEvent<const Name extends ClientEventName>(
-    definition: EventDefinition<Name>,
+	definition: EventDefinition<Name>,
 ): EventDefinition<Name> {
-    return definition;
+	return definition;
 }

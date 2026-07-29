@@ -7,75 +7,75 @@ import type { TokenizeResult } from "./types";
  * @returns A TokenizeResult containing the extracted tokens or a syntax error.
  */
 export function tokenizeArguments(input: string): TokenizeResult {
-    const tokens: string[] = [];
+	const tokens: string[] = [];
 
-    let current = "";
-    let quote: '"' | "'" | null = null;
-    let escaped = false;
-    let tokenStarted = false;
+	let current = "";
+	let quote: '"' | "'" | null = null;
+	let escaped = false;
+	let tokenStarted = false;
 
-    for (const character of input) {
-        if (escaped) {
-            current += character;
-            escaped = false;
-            tokenStarted = true;
-            continue;
-        }
+	for (const character of input) {
+		if (escaped) {
+			current += character;
+			escaped = false;
+			tokenStarted = true;
+			continue;
+		}
 
-        if (character === "\\") {
-            escaped = true;
-            tokenStarted = true;
-            continue;
-        }
+		if (character === "\\") {
+			escaped = true;
+			tokenStarted = true;
+			continue;
+		}
 
-        if (quote) {
-            if (character === quote) {
-                quote = null;
-            } else {
-                current += character;
-            }
-            continue;
-        }
+		if (quote) {
+			if (character === quote) {
+				quote = null;
+			} else {
+				current += character;
+			}
+			continue;
+		}
 
-        if (character === '"' || character === "'") {
-            quote = character;
-            tokenStarted = true;
-            continue;
-        }
+		if (character === '"' || character === "'") {
+			quote = character;
+			tokenStarted = true;
+			continue;
+		}
 
-        if (/\s/u.test(character)) {
-            if (tokenStarted) {
-                tokens.push(current);
-                current = "";
-                tokenStarted = false;
-            }
-            continue;
-        }
+		if (/\s/u.test(character)) {
+			if (tokenStarted) {
+				tokens.push(current);
+				current = "";
+				tokenStarted = false;
+			}
+			continue;
+		}
 
-        current += character;
-        tokenStarted = true;
-    }
+		current += character;
+		tokenStarted = true;
+	}
 
-    if (escaped) {
-        current += "\\";
-    }
+	if (escaped) {
+		current += "\\";
+	}
 
-    if (quote) {
-        return {
-            success: false,
-            error: {
-                code: "INVALID_SYNTAX",
-                message: "An argument has an unterminated quote.",
-            },
-        };
-    }
+	if (quote) {
+		return {
+			success: false,
+			error: {
+				code: "INVALID_SYNTAX",
+				message: "An argument has an unterminated quote.",
+			},
+		};
+	}
 
-    if (tokenStarted) {
-        tokens.push(current);
-    }
+	if (tokenStarted) {
+		tokens.push(current);
+	}
 
-    return {
-        success: true,
-        tokens,
-    };
+	return {
+		success: true,
+		tokens,
+	};
 }

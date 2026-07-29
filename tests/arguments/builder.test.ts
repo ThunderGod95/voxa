@@ -1,113 +1,232 @@
 import { describe, expect, test } from "bun:test";
-import { argument } from "@/arguments/builder";
+import { argument, option, value } from "../../src/arguments";
 
-describe("Argument Builder", () => {
-    describe("String Argument", () => {
-        test("validates min and max lengths", async () => {
-            const arg = argument.string({
-                description: "test",
-                minLength: 3,
-                maxLength: 5,
-            });
+describe("argument builder", () => {
+	test("creates a constrained string argument", async () => {
+		const arg = argument.string({
+			description: "A string.",
+			minLength: 3,
+			maxLength: 5,
+		});
 
-            expect((await arg._schema.safeParseAsync("hi")).success).toBe(
-                false,
-            );
-            expect((await arg._schema.safeParseAsync("hello")).success).toBe(
-                true,
-            );
-            expect((await arg._schema.safeParseAsync("too long")).success).toBe(
-                false,
-            );
-        });
-    });
+		expect((await arg.value._schema.safeParseAsync("hi")).success).toBe(false);
 
-    describe("Integer Argument", () => {
-        test("coerces numeric strings to integers", async () => {
-            const arg = argument.integer({ description: "test" });
-            const result = await arg._schema.safeParseAsync("123");
+		expect((await arg.value._schema.safeParseAsync("hello")).success).toBe(
+			true,
+		);
 
-            expect(result.success).toBe(true);
-            if (result.success) expect(result.data).toBe(123);
-        });
+		expect((await arg.value._schema.safeParseAsync("too long")).success).toBe(
+			false,
+		);
 
-        test("fails on floating point strings", async () => {
-            const arg = argument.integer({ description: "test" });
-            const result = await arg._schema.safeParseAsync("123.45");
-            expect(result.success).toBe(false);
-        });
-    });
+		expect(arg.placement).toBe("positional");
+		expect(arg.required).toBe(false);
+	});
 
-    describe("Number Argument", () => {
-        test("coerces valid floating point strings and validates bounds", async () => {
-            const arg = argument.number({
-                description: "test",
-                min: 1.5,
-                max: 5.5,
-            });
+	test("coerces integer strings", async () => {
+		const arg = argument.integer({
+			description: "An integer.",
+		});
 
-            expect((await arg._schema.safeParseAsync("3.14")).success).toBe(
-                true,
-            ); // Coerced
-            expect((await arg._schema.safeParseAsync(2.5)).success).toBe(true);
-            expect((await arg._schema.safeParseAsync("1.0")).success).toBe(
-                false,
-            ); // Below min
-            expect((await arg._schema.safeParseAsync("6.0")).success).toBe(
-                false,
-            ); // Above max
-        });
-    });
+		const result = await arg.value._schema.safeParseAsync("123");
 
-    describe("Boolean Argument", () => {
-        test("coerces truthy and falsy string values", async () => {
-            const arg = argument.boolean({ description: "test" });
+		expect(result).toEqual({
+			success: true,
+			data: 123,
+		});
+	});
 
-            const trueCases = ["true", "yes", "y", "1", "on", "enable"];
-            for (const val of trueCases) {
-                const res = await arg._schema.safeParseAsync(val);
-                expect(res.success && res.data === true).toBe(true);
-            }
+	test("rejects decimal input for integers", async () => {
+		const arg = argument.integer({
+			description: "An integer.",
+		});
 
-            const falseCases = ["false", "no", "n", "0", "off", "disable"];
-            for (const val of falseCases) {
-                const res = await arg._schema.safeParseAsync(val);
-                expect(res.success && res.data === false).toBe(true);
-            }
-        });
-    });
+		const result = await arg.value._schema.safeParseAsync("123.45");
 
-    describe("URL Argument", () => {
-        test("validates properly formatted URLs", async () => {
-            const arg = argument.url({ description: "test" });
+		expect(result.success).toBe(false);
+	});
 
-            expect(
-                (await arg._schema.safeParseAsync("https://example.com"))
-                    .success,
-            ).toBe(true);
-            expect(
-                (await arg._schema.safeParseAsync("not-a-url")).success,
-            ).toBe(false);
-        });
-    });
+	test("coerces and constrains number values", async () => {
+		const arg = argument.number({
+			description: "A number.",
+			min: 2,
+			max: 5,
+		});
 
-    describe("Optional vs Required", () => {
-        test("allows null when required is false", async () => {
-            const arg = argument.string({
-                description: "test",
-                required: false,
-            });
-            const result = await arg._schema.safeParseAsync(null);
-            expect(result.success).toBe(true);
-        });
+		expect((await arg.value._schema.safeParseAsync("3.14")).success).toBe(true);
 
-        test("rejects null when required is true", async () => {
-            const arg = argument.string({
-                description: "test",
-                required: true,
-            });
-            const result = await arg._schema.safeParseAsync(null);
-            expect(result.success).toBe(false);
-        });
-    });
+		expect((await arg.value._schema.safeParseAsync(2.5)).success).toBe(true);
+
+		expect((await arg.value._schema.safeParseAsync("1.0")).success).toBe(false);
+
+		expect((await arg.value._schema.safeParseAsync("6.0")).success).toBe(false);
+	});
+
+	test("parses supported true boolean values", async () => {
+		const arg = argument.boolean({
+			description: "A boolean.",
+		});
+
+		for (const input of ["true", "yes", "y", "1", "on", "enable", "enabled"]) {
+			const result = await arg.value._schema.safeParseAsync(input);
+
+			expect(result).toEqual({
+				success: true,
+				data: true,
+			});
+		}
+	});
+
+	test("parses supported false boolean values", async () => {
+		const arg = argument.boolean({
+			description: "A boolean.",
+		});
+
+		for (const input of [
+			"false",
+			"no",
+			"n",
+			"0",
+			"off",
+			"disable",
+			"disabled",
+		]) {
+			const result = await arg.value._schema.safeParseAsync(input);
+
+			expect(result).toEqual({
+				success: true,
+				data: false,
+			});
+		}
+	});
+
+	test("parses valid URLs", async () => {
+		const arg = argument.url({
+			description: "A URL.",
+		});
+
+		const result = await arg.value._schema.safeParseAsync(
+			"https://example.com",
+		);
+
+		expect(result.success).toBe(true);
+
+		if (!result.success) {
+			throw new Error("Expected URL parsing to succeed.");
+		}
+
+		expect(result.data).toBeInstanceOf(URL);
+		expect(result.data.href).toBe("https://example.com/");
+	});
+
+	test("rejects invalid URLs", async () => {
+		const arg = argument.url({
+			description: "A URL.",
+		});
+
+		expect((await arg.value._schema.safeParseAsync("not-a-url")).success).toBe(
+			false,
+		);
+	});
+
+	test("optional arguments are optional at the binding layer", async () => {
+		const arg = argument.string({
+			description: "Optional string.",
+		});
+
+		expect(arg.required).toBe(false);
+
+		/*
+		 * The semantic value itself remains non-nullable.
+		 *
+		 * parseMessageArguments() produces null when this binding is omitted.
+		 */
+		const result = await arg.value._schema.safeParseAsync(null);
+
+		expect(result.success).toBe(false);
+	});
+
+	test("required arguments are required at the binding layer", async () => {
+		const arg = argument.string({
+			description: "Required string.",
+			required: true,
+		});
+
+		expect(arg.required).toBe(true);
+
+		const result = await arg.value._schema.safeParseAsync(null);
+
+		expect(result.success).toBe(false);
+	});
+
+	test("creates rest positional arguments", () => {
+		const arg = argument.string({
+			description: "Remaining text.",
+			rest: true,
+		});
+
+		expect(arg.placement).toBe("positional");
+		expect(arg.rest).toBe(true);
+	});
+
+	test("creates named options", () => {
+		const amount = option.integer({
+			description: "Amount.",
+			required: true,
+			short: "a",
+			longAliases: ["xp"],
+		});
+
+		expect(amount.placement).toBe("option");
+		expect(amount.required).toBe(true);
+		expect(amount.short).toBe("a");
+		expect(amount.longAliases).toEqual(["xp"]);
+	});
+
+	test("preserves literal string choices", async () => {
+		const arg = argument.string({
+			description: "Metric.",
+			choices: ["xp", "messages", "reactions"] as const,
+		});
+
+		expect((await arg.value._schema.safeParseAsync("xp")).success).toBe(true);
+
+		expect((await arg.value._schema.safeParseAsync("invalid")).success).toBe(
+			false,
+		);
+	});
+
+	test("preserves numeric choices", async () => {
+		const arg = option.integer({
+			description: "Page size.",
+			choices: [10, 25, 50] as const,
+		});
+
+		expect((await arg.value._schema.safeParseAsync(25)).success).toBe(true);
+
+		expect((await arg.value._schema.safeParseAsync(30)).success).toBe(false);
+	});
+
+	test("constructs reusable semantic values", async () => {
+		const integer = value.integer({
+			min: 1,
+			max: 10,
+		});
+
+		expect((await integer._schema.safeParseAsync("5")).success).toBe(true);
+
+		expect((await integer._schema.safeParseAsync("20")).success).toBe(false);
+	});
+
+	test("constructs unions", () => {
+		const arg = argument.union({
+			description: "Integer or text.",
+			variants: [value.integer(), value.string()],
+			slashVariant: 0,
+		});
+
+		expect(arg.value.type).toBe("union");
+		expect(arg.value.variants).toHaveLength(2);
+		expect(arg.value.slashVariant).toBe(0);
+	});
 });

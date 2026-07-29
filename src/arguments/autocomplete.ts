@@ -1,109 +1,99 @@
 import type { AutocompleteInteraction } from "discord.js";
 import { resolveArgumentChoices } from "./choices";
 import type {
-    ArgumentChoices,
-    ArgumentChoiceValue,
-    ArgumentSchema,
-    CommandArgumentDefinition,
+	ArgumentChoices,
+	ArgumentChoiceValue,
+	ArgumentSchema,
+	ScalarValueDefinition,
 } from "./types";
+import {
+	getSlashValueDefinition,
+	isAutocompletableValueDefinition,
+} from "./value";
 
 const MAX_AUTOCOMPLETE_CHOICES = 25;
 
-type AutocompletableArgumentDefinition = Extract<
-    CommandArgumentDefinition,
-    {
-        type: "string" | "integer" | "number" | "timezone" | "time" | "url";
-    }
->;
-
-function isAutocompletableArgument(
-    definition: CommandArgumentDefinition,
-): definition is AutocompletableArgumentDefinition {
-    return (
-        definition.type === "string" ||
-        definition.type === "integer" ||
-        definition.type === "number" ||
-        definition.type === "timezone" ||
-        definition.type === "time" ||
-        definition.type === "url"
-    );
-}
-
 function assertAutocompleteChoiceType(
-    definition: AutocompletableArgumentDefinition,
-    value: ArgumentChoiceValue,
+	definition: ScalarValueDefinition,
+	choiceValue: ArgumentChoiceValue,
 ): void {
-    const expectsNumber =
-        definition.type === "integer" || definition.type === "number";
+	const expectsNumber =
+		definition.type === "integer" || definition.type === "number";
 
-    if (expectsNumber && typeof value !== "number") {
-        throw new Error(
-            `Autocomplete for a ${definition.type} argument returned ` +
-                `a non-number value: ${String(value)}.`,
-        );
-    }
+	if (expectsNumber && typeof choiceValue !== "number") {
+		throw new Error(
+			`Autocomplete for a ${definition.type} argument returned ` +
+				`a non-number value: ${String(choiceValue)}.`,
+		);
+	}
 
-    if (!expectsNumber && typeof value !== "string") {
-        throw new Error(
-            `Autocomplete for a ${definition.type} argument returned ` +
-                `a non-string value: ${String(value)}.`,
-        );
-    }
+	if (!expectsNumber && typeof choiceValue !== "string") {
+		throw new Error(
+			`Autocomplete for a ${definition.type} argument returned ` +
+				`a non-string value: ${String(choiceValue)}.`,
+		);
+	}
 }
 
+/**
+ * Runs the autocomplete callback attached to the focused argument.
+ */
 export async function respondToArgumentAutocomplete(
-    schema: ArgumentSchema,
-    interaction: AutocompleteInteraction,
+	schema: ArgumentSchema,
+	interaction: AutocompleteInteraction,
 ): Promise<boolean> {
-    const focused = interaction.options.getFocused(true);
-    const definition = schema[focused.name];
+	const focused = interaction.options.getFocused(true);
+	const definition = schema[focused.name];
 
-    if (
-        !definition ||
-        !isAutocompletableArgument(definition) ||
-        definition.autocomplete === undefined
-    ) {
-        return false;
-    }
+	if (!definition || definition.autocomplete === undefined) {
+		return false;
+	}
 
-    const result = await definition.autocomplete({
-        interaction,
-        name: focused.name,
-        value: focused.value,
-    });
+	const slashValue = getSlashValueDefinition(definition.value);
 
-    const resolved = resolveArgumentChoices(
-        result as ArgumentChoices<ArgumentChoiceValue>,
-    );
+	if (!isAutocompletableValueDefinition(slashValue)) {
+		return false;
+	}
 
-    const response = [];
+	const result = await definition.autocomplete({
+		interaction,
+		name: focused.name,
+		value: focused.value,
+	});
 
-    for (const choice of resolved.slice(0, MAX_AUTOCOMPLETE_CHOICES)) {
-        if (choice.name.length < 1 || choice.name.length > 100) {
-            throw new Error(
-                `Autocomplete choice names must contain between ` +
-                    `1 and 100 characters. Received "${choice.name}".`,
-            );
-        }
+	const choices = resolveArgumentChoices(
+		result as ArgumentChoices<ArgumentChoiceValue>,
+	);
 
-        assertAutocompleteChoiceType(definition, choice.value);
+	const response: {
+		name: string;
+		value: string | number;
+	}[] = [];
 
-        const validation = await definition._schema.safeParseAsync(
-            choice.value,
-        );
+	for (const choice of choices.slice(0, MAX_AUTOCOMPLETE_CHOICES)) {
+		if (choice.name.length < 1 || choice.name.length > 100) {
+			throw new Error(
+				"Autocomplete choice names must contain between " +
+					`1 and 100 characters. Received "${choice.name}".`,
+			);
+		}
 
-        if (!validation.success) {
-            throw new Error(
-                `Autocomplete value "${String(choice.value)}" for ` +
-                    `"${focused.name}" is invalid: ` +
-                    `${validation.error.issues[0]?.message ?? "Invalid value."}`,
-            );
-        }
+		assertAutocompleteChoiceType(slashValue, choice.value);
 
-        response.push(choice);
-    }
+		const validation = await slashValue._schema.safeParseAsync(choice.value);
 
-    await interaction.respond(response);
+		if (!validation.success) {
+			throw new Error(
+				`Autocomplete value "${String(choice.value)}" for ` +
+					`"${focused.name}" is invalid: ` +
+					(validation.error.issues[0]?.message ?? "Invalid value."),
+			);
+		}
 
-    return true;
+		response.push(choice);
+	}
+
+	await interaction.respond(response);
+
+	return true;
 }

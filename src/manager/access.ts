@@ -9,10 +9,10 @@ import type { CommandRoute } from "./route";
  * @internal
  */
 export interface EffectiveCommandAccess {
-    devOnly: boolean;
-    guildOnly: boolean;
-    userPermissions: readonly PermissionResolvable[];
-    botPermissions: readonly PermissionResolvable[];
+	devOnly: boolean;
+	guildOnly: boolean;
+	userPermissions: readonly PermissionResolvable[];
+	botPermissions: readonly PermissionResolvable[];
 }
 
 /**
@@ -21,29 +21,29 @@ export interface EffectiveCommandAccess {
  * @internal
  */
 export function getEffectiveCommandAccess(
-    route: CommandRoute,
+	route: CommandRoute,
 ): EffectiveCommandAccess {
-    const groups = route.groups ?? [];
+	const groups = route.groups ?? [];
 
-    return {
-        devOnly:
-            route.command.devOnly === true ||
-            groups.some((group) => group.devOnly === true),
+	return {
+		devOnly:
+			route.command.devOnly === true ||
+			groups.some((group) => group.devOnly === true),
 
-        guildOnly:
-            route.command.guildOnly === true ||
-            groups.some((group) => group.guildOnly === true),
+		guildOnly:
+			route.command.guildOnly === true ||
+			groups.some((group) => group.guildOnly === true),
 
-        userPermissions: [
-            ...groups.flatMap((group) => group.userPermissions ?? []),
-            ...(route.command.userPermissions ?? []),
-        ],
+		userPermissions: [
+			...groups.flatMap((group) => group.userPermissions ?? []),
+			...(route.command.userPermissions ?? []),
+		],
 
-        botPermissions: [
-            ...groups.flatMap((group) => group.botPermissions ?? []),
-            ...(route.command.botPermissions ?? []),
-        ],
-    };
+		botPermissions: [
+			...groups.flatMap((group) => group.botPermissions ?? []),
+			...(route.command.botPermissions ?? []),
+		],
+	};
 }
 
 /**
@@ -55,16 +55,16 @@ export function getEffectiveCommandAccess(
  * @internal
  */
 export function isSlashRouteEnabled(route: CommandRoute): boolean {
-    return (
-        route.command.slash !== false &&
-        (route.groups ?? []).every((group) => group.slash !== false)
-    );
+	return (
+		route.command.slash !== false &&
+		(route.groups ?? []).every((group) => group.slash !== false)
+	);
 }
 
 type AccessControllerConfig = Required<
-    Pick<CommandHandlerConfig, "allowBots" | "allowOnlyDevs" | "devIds">
+	Pick<CommandHandlerConfig, "allowBots" | "allowOnlyDevs" | "devIds">
 > & {
-    isIgnored?: CommandHandlerConfig["isIgnored"];
+	isIgnored?: CommandHandlerConfig["isIgnored"];
 };
 
 /**
@@ -73,166 +73,158 @@ type AccessControllerConfig = Required<
  * @internal
  */
 export class CommandAccessController {
-    public constructor(private readonly config: AccessControllerConfig) {}
+	public constructor(private readonly config: AccessControllerConfig) {}
 
-    private isDeveloper(userId: string): boolean {
-        return this.config.devIds.includes(userId);
-    }
+	private isDeveloper(userId: string): boolean {
+		return this.config.devIds.includes(userId);
+	}
 
-    /**
-     * Returns whether a user is globally eligible for command processing.
-     *
-     * This check covers bot users, ignored users, and global developer-only
-     * mode. Rejected users are ignored silently.
-     */
-    public canProcessUser(userId: string, isBot: boolean): boolean {
-        if (isBot && !this.config.allowBots) {
-            return false;
-        }
+	/**
+	 * Returns whether a user is globally eligible for command processing.
+	 *
+	 * This check covers bot users, ignored users, and global developer-only
+	 * mode. Rejected users are ignored silently.
+	 */
+	public canProcessUser(userId: string, isBot: boolean): boolean {
+		if (isBot && !this.config.allowBots) {
+			return false;
+		}
 
-        if (this.config.isIgnored?.(userId)) {
-            return false;
-        }
+		if (this.config.isIgnored?.(userId)) {
+			return false;
+		}
 
-        if (this.config.allowOnlyDevs && !this.isDeveloper(userId)) {
-            return false;
-        }
+		if (this.config.allowOnlyDevs && !this.isDeveloper(userId)) {
+			return false;
+		}
 
-        return true;
-    }
+		return true;
+	}
 
-    /**
-     * Verifies inherited developer restrictions, guild restrictions, and
-     * channel permissions for a route.
-     *
-     * Developer-only failures are ignored silently, matching global
-     * developer-only mode. Other access failures are rendered through the
-     * supplied command context.
-     *
-     * @param route - Route being invoked.
-     * @param context - Context used to inspect the invocation and send errors.
-     */
-    public async checkRoute(
-        route: CommandRoute,
-        context: CommandContext<Record<string, never>>,
-    ): Promise<boolean> {
-        const access = getEffectiveCommandAccess(route);
+	/**
+	 * Verifies inherited developer restrictions, guild restrictions, and
+	 * channel permissions for a route.
+	 *
+	 * Developer-only failures are ignored silently, matching global
+	 * developer-only mode. Other access failures are rendered through the
+	 * supplied command context.
+	 *
+	 * @param route - Route being invoked.
+	 * @param context - Context used to inspect the invocation and send errors.
+	 */
+	public async checkRoute(
+		route: CommandRoute,
+		context: CommandContext<Record<string, never>>,
+	): Promise<boolean> {
+		const access = getEffectiveCommandAccess(route);
 
-        if (access.devOnly && !this.isDeveloper(context.userId)) {
-            return false;
-        }
+		if (access.devOnly && !this.isDeveloper(context.userId)) {
+			return false;
+		}
 
-        if (access.guildOnly && !context.guildOrNull) {
-            await context.replyError(
-                "This command can only be used in a server.",
-            );
+		if (access.guildOnly && !context.guildOrNull) {
+			await context.replyError("This command can only be used in a server.");
 
-            return false;
-        }
+			return false;
+		}
 
-        const guild = context.guildOrNull;
+		const guild = context.guildOrNull;
 
-        if (!guild) {
-            return true;
-        }
+		if (!guild) {
+			return true;
+		}
 
-        const channel = context.raw.channel;
+		const channel = context.raw.channel;
 
-        if (!channel?.isTextBased() || channel.isDMBased()) {
-            return true;
-        }
+		if (!channel?.isTextBased() || channel.isDMBased()) {
+			return true;
+		}
 
-        const member = context.member ?? (await context.fetchMember());
+		const member = context.member ?? (await context.fetchMember());
 
-        if (!member) {
-            await context.replyError(
-                "Could not resolve your server member data.",
-            );
+		if (!member) {
+			await context.replyError("Could not resolve your server member data.");
 
-            return false;
-        }
+			return false;
+		}
 
-        if (access.userPermissions.length > 0) {
-            const missingPermissions = member
-                .permissionsIn(channel)
-                .missing(access.userPermissions);
+		if (access.userPermissions.length > 0) {
+			const missingPermissions = member
+				.permissionsIn(channel)
+				.missing(access.userPermissions);
 
-            if (missingPermissions.length > 0) {
-                await context.replyError(
-                    "You lack the required permissions to use this: " +
-                        `\`${missingPermissions.join(", ")}\``,
-                );
+			if (missingPermissions.length > 0) {
+				await context.replyError(
+					"You lack the required permissions to use this: " +
+						`\`${missingPermissions.join(", ")}\``,
+				);
 
-                return false;
-            }
-        }
+				return false;
+			}
+		}
 
-        if (access.botPermissions.length > 0) {
-            const botMember =
-                guild.members.me ??
-                (await guild.members.fetchMe().catch(() => null));
+		if (access.botPermissions.length > 0) {
+			const botMember =
+				guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
 
-            if (!botMember) {
-                await context.replyError(
-                    "Could not resolve my server member data.",
-                );
+			if (!botMember) {
+				await context.replyError("Could not resolve my server member data.");
 
-                return false;
-            }
+				return false;
+			}
 
-            const missingPermissions = botMember
-                .permissionsIn(channel)
-                .missing(access.botPermissions);
+			const missingPermissions = botMember
+				.permissionsIn(channel)
+				.missing(access.botPermissions);
 
-            if (missingPermissions.length > 0) {
-                await context.replyError(
-                    "I am missing permissions to execute this: " +
-                        `\`${missingPermissions.join(", ")}\``,
-                );
+			if (missingPermissions.length > 0) {
+				await context.replyError(
+					"I am missing permissions to execute this: " +
+						`\`${missingPermissions.join(", ")}\``,
+				);
 
-                return false;
-            }
-        }
+				return false;
+			}
+		}
 
-        return true;
-    }
+		return true;
+	}
 
-    public checkAutocompleteRoute(
-        route: CommandRoute,
-        interaction: AutocompleteInteraction,
-    ): boolean {
-        const access = getEffectiveCommandAccess(route);
+	public checkAutocompleteRoute(
+		route: CommandRoute,
+		interaction: AutocompleteInteraction,
+	): boolean {
+		const access = getEffectiveCommandAccess(route);
 
-        if (access.devOnly && !this.isDeveloper(interaction.user.id)) {
-            return false;
-        }
+		if (access.devOnly && !this.isDeveloper(interaction.user.id)) {
+			return false;
+		}
 
-        if (access.guildOnly && !interaction.inGuild()) {
-            return false;
-        }
+		if (access.guildOnly && !interaction.inGuild()) {
+			return false;
+		}
 
-        if (!interaction.inGuild()) {
-            return true;
-        }
+		if (!interaction.inGuild()) {
+			return true;
+		}
 
-        if (
-            access.userPermissions.length > 0 &&
-            (!interaction.memberPermissions ||
-                interaction.memberPermissions.missing(access.userPermissions)
-                    .length > 0)
-        ) {
-            return false;
-        }
+		if (
+			access.userPermissions.length > 0 &&
+			(!interaction.memberPermissions ||
+				interaction.memberPermissions.missing(access.userPermissions).length >
+					0)
+		) {
+			return false;
+		}
 
-        if (
-            access.botPermissions.length > 0 &&
-            (!interaction.appPermissions ||
-                interaction.appPermissions.missing(access.botPermissions)
-                    .length > 0)
-        ) {
-            return false;
-        }
+		if (
+			access.botPermissions.length > 0 &&
+			(!interaction.appPermissions ||
+				interaction.appPermissions.missing(access.botPermissions).length > 0)
+		) {
+			return false;
+		}
 
-        return true;
-    }
+		return true;
+	}
 }

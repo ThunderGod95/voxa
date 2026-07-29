@@ -1,127 +1,125 @@
 import {
-    type ChatInputCommandInteraction,
-    type Message,
-    MessageFlags,
+	type ChatInputCommandInteraction,
+	type Message,
+	MessageFlags,
 } from "discord.js";
 import type { CommandLogger } from "./logger";
 import {
-    type CommandModalPayload,
-    type CommandReplyPayload,
-    toInteractionEditReplyOptions,
-    toInteractionReplyOptions,
-    toMessageEditOptions,
-    toMessageReplyOptions,
+	type CommandModalPayload,
+	type CommandReplyPayload,
+	toInteractionEditReplyOptions,
+	toInteractionReplyOptions,
+	toMessageEditOptions,
+	toMessageReplyOptions,
 } from "./reply";
 import type { CommandSource } from "./source";
 
 export interface CommandResponder {
-    deferReply(ephemeral?: boolean): Promise<void>;
-    editReply(payload: CommandReplyPayload): Promise<Message>;
-    followUp(payload: CommandReplyPayload): Promise<Message>;
-    showModal(modal: CommandModalPayload): Promise<void>;
+	deferReply(ephemeral?: boolean): Promise<void>;
+	editReply(payload: CommandReplyPayload): Promise<Message>;
+	followUp(payload: CommandReplyPayload): Promise<Message>;
+	showModal(modal: CommandModalPayload): Promise<void>;
 }
 
 class InteractionCommandResponder implements CommandResponder {
-    public constructor(
-        private readonly interaction: ChatInputCommandInteraction,
-    ) {}
+	public constructor(
+		private readonly interaction: ChatInputCommandInteraction,
+	) {}
 
-    public async deferReply(ephemeral = false): Promise<void> {
-        if (this.interaction.deferred || this.interaction.replied) {
-            return;
-        }
+	public async deferReply(ephemeral = false): Promise<void> {
+		if (this.interaction.deferred || this.interaction.replied) {
+			return;
+		}
 
-        await this.interaction.deferReply({
-            flags: ephemeral ? MessageFlags.Ephemeral : undefined,
-        });
-    }
+		await this.interaction.deferReply({
+			flags: ephemeral ? MessageFlags.Ephemeral : undefined,
+		});
+	}
 
-    public async editReply(payload: CommandReplyPayload): Promise<Message> {
-        if (this.interaction.deferred || this.interaction.replied) {
-            return this.interaction.editReply(
-                toInteractionEditReplyOptions(payload),
-            );
-        }
+	public async editReply(payload: CommandReplyPayload): Promise<Message> {
+		if (this.interaction.deferred || this.interaction.replied) {
+			return this.interaction.editReply(toInteractionEditReplyOptions(payload));
+		}
 
-        await this.interaction.reply(toInteractionReplyOptions(payload));
+		await this.interaction.reply(toInteractionReplyOptions(payload));
 
-        return this.interaction.fetchReply();
-    }
+		return this.interaction.fetchReply();
+	}
 
-    public async followUp(payload: CommandReplyPayload): Promise<Message> {
-        if (!this.interaction.deferred && !this.interaction.replied) {
-            await this.interaction.reply(toInteractionReplyOptions(payload));
+	public async followUp(payload: CommandReplyPayload): Promise<Message> {
+		if (!this.interaction.deferred && !this.interaction.replied) {
+			await this.interaction.reply(toInteractionReplyOptions(payload));
 
-            return this.interaction.fetchReply();
-        }
+			return this.interaction.fetchReply();
+		}
 
-        return this.interaction.followUp(toInteractionReplyOptions(payload));
-    }
+		return this.interaction.followUp(toInteractionReplyOptions(payload));
+	}
 
-    public async showModal(modal: CommandModalPayload): Promise<void> {
-        if (this.interaction.deferred || this.interaction.replied) {
-            throw new Error(
-                "Cannot show a modal after the interaction has been acknowledged.",
-            );
-        }
+	public async showModal(modal: CommandModalPayload): Promise<void> {
+		if (this.interaction.deferred || this.interaction.replied) {
+			throw new Error(
+				"Cannot show a modal after the interaction has been acknowledged.",
+			);
+		}
 
-        await this.interaction.showModal(modal);
-    }
+		await this.interaction.showModal(modal);
+	}
 }
 
 class MessageCommandResponder implements CommandResponder {
-    private replyMessage: Message | null = null;
+	private replyMessage: Message | null = null;
 
-    public constructor(
-        private readonly message: Message,
-        private readonly logger: CommandLogger,
-    ) {}
+	public constructor(
+		private readonly message: Message,
+		private readonly logger: CommandLogger,
+	) {}
 
-    public async deferReply(): Promise<void> {
-        const channel = this.message.channel;
+	public async deferReply(): Promise<void> {
+		const channel = this.message.channel;
 
-        if (!("sendTyping" in channel)) {
-            return;
-        }
+		if (!("sendTyping" in channel)) {
+			return;
+		}
 
-        await channel.sendTyping().catch((error: unknown) => {
-            const errorMessage =
-                error instanceof Error ? error.message : String(error);
+		await channel.sendTyping().catch((error: unknown) => {
+			const errorMessage =
+				error instanceof Error ? error.message : String(error);
 
-            this.logger.warn(
-                `Failed to send a typing indicator in channel ${channel.id}: ${errorMessage}`,
-            );
-        });
-    }
+			this.logger.warn(
+				`Failed to send a typing indicator in channel ${channel.id}: ${errorMessage}`,
+			);
+		});
+	}
 
-    public async editReply(payload: CommandReplyPayload): Promise<Message> {
-        if (this.replyMessage) {
-            return this.replyMessage.edit(toMessageEditOptions(payload));
-        }
+	public async editReply(payload: CommandReplyPayload): Promise<Message> {
+		if (this.replyMessage) {
+			return this.replyMessage.edit(toMessageEditOptions(payload));
+		}
 
-        this.replyMessage = await this.message.reply(
-            toMessageReplyOptions(payload),
-        );
+		this.replyMessage = await this.message.reply(
+			toMessageReplyOptions(payload),
+		);
 
-        return this.replyMessage;
-    }
+		return this.replyMessage;
+	}
 
-    public followUp(payload: CommandReplyPayload): Promise<Message> {
-        return this.message.reply(toMessageReplyOptions(payload));
-    }
+	public followUp(payload: CommandReplyPayload): Promise<Message> {
+		return this.message.reply(toMessageReplyOptions(payload));
+	}
 
-    public async showModal(_modal: CommandModalPayload): Promise<void> {
-        throw new Error(
-            "Modals can only be shown in response to Discord interactions.",
-        );
-    }
+	public async showModal(_modal: CommandModalPayload): Promise<void> {
+		throw new Error(
+			"Modals can only be shown in response to Discord interactions.",
+		);
+	}
 }
 
 export function createCommandResponder(
-    source: CommandSource,
-    logger: CommandLogger,
+	source: CommandSource,
+	logger: CommandLogger,
 ): CommandResponder {
-    return source.kind === "interaction"
-        ? new InteractionCommandResponder(source.raw)
-        : new MessageCommandResponder(source.raw, logger);
+	return source.kind === "interaction"
+		? new InteractionCommandResponder(source.raw)
+		: new MessageCommandResponder(source.raw, logger);
 }
