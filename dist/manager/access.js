@@ -107,8 +107,7 @@ export class CommandAccessController {
             }
         }
         if (access.botPermissions.length > 0) {
-            const botMember = guild.members.me ??
-                (await guild.members.fetchMe().catch(() => null));
+            const botMember = guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
             if (!botMember) {
                 await context.replyError("Could not resolve my server member data.");
                 return false;
@@ -137,14 +136,13 @@ export class CommandAccessController {
         }
         if (access.userPermissions.length > 0 &&
             (!interaction.memberPermissions ||
-                interaction.memberPermissions.missing(access.userPermissions)
-                    .length > 0)) {
+                interaction.memberPermissions.missing(access.userPermissions).length >
+                    0)) {
             return false;
         }
         if (access.botPermissions.length > 0 &&
             (!interaction.appPermissions ||
-                interaction.appPermissions.missing(access.botPermissions)
-                    .length > 0)) {
+                interaction.appPermissions.missing(access.botPermissions).length > 0)) {
             return false;
         }
         return true;

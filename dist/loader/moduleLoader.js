@@ -39,8 +39,7 @@ async function collectModuleFiles(directory, recursive, allowedPrivateFileStems)
                 }
                 continue;
             }
-            if (entry.isFile() &&
-                isModuleFile(entry.name, allowedPrivateFileStems)) {
+            if (entry.isFile() && isModuleFile(entry.name, allowedPrivateFileStems)) {
                 files.push(entryPath);
             }
         }

@@ -21,9 +21,7 @@ function getCommandFromModule(moduleExports) {
     return isCommandDefinition(candidate) ? candidate : null;
 }
 function getGroupFromModule(moduleExports) {
-    const candidate = moduleExports.default ??
-        moduleExports.group ??
-        moduleExports.commandGroup;
+    const candidate = moduleExports.default ?? moduleExports.group ?? moduleExports.commandGroup;
     return isCommandGroup(candidate) ? candidate : null;
 }
 function groupKey(segments) {

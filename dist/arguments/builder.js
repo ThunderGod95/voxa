@@ -1,316 +1,199 @@
-import { z } from "zod";
-import { formatArgumentChoiceValues, getArgumentChoiceValues } from "./choices";
-import { parseNaturalTime } from "./timeParser";
-import { resolveTimezone } from "./timezoneParser";
-function requiredValue(required) {
+import { value } from "./value";
+function resolveRequired(required) {
     return (required ?? false);
 }
-function restValue(rest) {
-    return rest ?? false;
+function getChoices(choices) {
+    return choices;
 }
-function applyRequired(schema, required) {
-    return (required ? schema : schema.nullable());
+function createPositionalDefinition(valueDefinition, options) {
+    return {
+        placement: "positional",
+        description: options.description,
+        required: resolveRequired(options.required),
+        rest: options.rest ?? false,
+        value: valueDefinition,
+        autocomplete: options.autocomplete,
+    };
 }
-function applyChoices(schema, choices) {
-    if (choices === undefined) {
-        return schema;
-    }
-    const values = getArgumentChoiceValues(choices);
-    const allowedValues = new Set(values);
-    return schema.refine((value) => allowedValues.has(value), {
-        message: `Must be one of: ${formatArgumentChoiceValues(values)}.`,
-    });
+function createNamedDefinition(valueDefinition, options) {
+    return {
+        placement: "option",
+        description: options.description,
+        required: resolveRequired(options.required),
+        short: options.short,
+        longAliases: options.longAliases ?? [],
+        value: valueDefinition,
+        autocomplete: options.autocomplete,
+    };
 }
 /**
- * Factory object for creating strongly-typed command argument definitions.
+ * Factory for positional command arguments.
+ *
+ * Positional placement only affects message commands. Discord application
+ * command options are always named.
  */
 export const argument = {
-    /** Constructs a string argument definition. */
+    /** Constructs a positional string argument. */
     string(options) {
-        let schema = z.string({
-            error: "Must be a string.",
-        });
-        if (options.minLength !== undefined) {
-            schema = schema.min(options.minLength, {
-                message: `Must contain at least ${options.minLength} characters.`,
-            });
-        }
-        if (options.maxLength !== undefined) {
-            schema = schema.max(options.maxLength, {
-                message: `Cannot contain more than ${options.maxLength} characters.`,
-            });
-        }
-        const choiceSchema = applyChoices(schema, options.choices);
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(choiceSchema, isRequired);
-        return {
-            type: "string",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
+        const valueDefinition = value.string({
             minLength: options.minLength,
             maxLength: options.maxLength,
-            choices: options.choices,
+            choices: getChoices(options.choices),
             aliases: options.aliases,
-            autocomplete: options.autocomplete,
-            _schema: finalSchema,
-        };
+        });
+        return createPositionalDefinition(valueDefinition, options);
     },
-    /** Constructs an integer argument definition. Input is coerced automatically. */
+    /** Constructs a positional integer argument. */
     integer(options) {
-        let numberSchema = z
-            .number({ error: "Must be a valid number." })
-            .int({ message: "Must be a whole number." });
-        if (options.min !== undefined) {
-            numberSchema = numberSchema.min(options.min, {
-                message: `Must be at least ${options.min}.`,
-            });
-        }
-        if (options.max !== undefined) {
-            numberSchema = numberSchema.max(options.max, {
-                message: `Cannot be more than ${options.max}.`,
-            });
-        }
-        const schema = z.preprocess((value) => {
-            if (typeof value === "number") {
-                return value;
-            }
-            if (typeof value === "string" && /^[+-]?\d+$/u.test(value.trim())) {
-                return Number(value);
-            }
-            return value;
-        }, numberSchema);
-        const choiceSchema = applyChoices(schema, options.choices);
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(choiceSchema, isRequired);
-        return {
-            type: "integer",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
+        const valueDefinition = value.integer({
             min: options.min,
             max: options.max,
-            choices: options.choices,
-            autocomplete: options.autocomplete,
-            _schema: finalSchema,
-        };
+            choices: getChoices(options.choices),
+        });
+        return createPositionalDefinition(valueDefinition, options);
     },
-    /** Constructs a floating-point number argument definition. */
+    /** Constructs a positional number argument. */
     number(options) {
-        let numberSchema = z.number({
-            error: "Must be a valid number.",
-        });
-        if (options.min !== undefined) {
-            numberSchema = numberSchema.min(options.min, {
-                message: `Must be at least ${options.min}.`,
-            });
-        }
-        if (options.max !== undefined) {
-            numberSchema = numberSchema.max(options.max, {
-                message: `Cannot be more than ${options.max}.`,
-            });
-        }
-        const schema = z.preprocess((value) => {
-            if (typeof value === "number") {
-                return value;
-            }
-            if (typeof value === "string" && value.trim().length > 0) {
-                const parsed = Number(value);
-                if (!Number.isNaN(parsed)) {
-                    return parsed;
-                }
-            }
-            return value;
-        }, numberSchema);
-        const choiceSchema = applyChoices(schema, options.choices);
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(choiceSchema, isRequired);
-        return {
-            type: "number",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
+        const valueDefinition = value.number({
             min: options.min,
             max: options.max,
-            choices: options.choices,
-            autocomplete: options.autocomplete,
-            _schema: finalSchema,
-        };
+            choices: getChoices(options.choices),
+        });
+        return createPositionalDefinition(valueDefinition, options);
     },
-    /** Constructs a boolean argument. Accepts various truthy/falsy string representations. */
+    /** Constructs a positional boolean argument. */
     boolean(options) {
-        const trueValues = ["true", "yes", "y", "1", "on", "enable", "enabled"];
-        const falseValues = [
-            "false",
-            "no",
-            "n",
-            "0",
-            "off",
-            "disable",
-            "disabled",
-        ];
-        const schema = z.preprocess((val) => {
-            if (typeof val === "boolean")
-                return val;
-            if (typeof val === "string") {
-                const normalized = val.toLowerCase().trim();
-                if (trueValues.includes(normalized))
-                    return true;
-                if (falseValues.includes(normalized))
-                    return false;
-            }
-            return val;
-        }, z.boolean({ error: "Must be true or false." }));
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-        return {
-            type: "boolean",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            _schema: finalSchema,
-        };
+        return createPositionalDefinition(value.boolean(), options);
     },
-    /** Constructs a Discord User argument definition. */
+    /** Constructs a positional Discord user argument. */
     user(options) {
-        const schema = z.custom((val) => val !== null && typeof val === "object" && "id" in val, { message: "Could not resolve a valid user." });
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-        return {
-            type: "user",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            _schema: finalSchema,
-        };
+        return createPositionalDefinition(value.user(), options);
     },
-    /** Constructs a Discord GuildMember argument definition. */
+    /** Constructs a positional Discord guild-member argument. */
     member(options) {
-        const schema = z.custom((val) => val !== null && typeof val === "object" && "user" in val, { message: "Could not resolve a valid server member." });
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-        return {
-            type: "member",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            _schema: finalSchema,
-        };
+        return createPositionalDefinition(value.member(), options);
     },
-    /** Constructs a Discord Role argument definition. */
+    /** Constructs a positional Discord role argument. */
     role(options) {
-        const schema = z.custom((val) => val !== null && typeof val === "object" && "name" in val, { message: "Could not resolve a valid role." });
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-        return {
-            type: "role",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            ...(options.allowedRoleIds !== undefined
-                ? { allowedRoleIds: options.allowedRoleIds }
-                : {}),
-            _schema: finalSchema,
-        };
+        return createPositionalDefinition(value.role({
+            allowedRoleIds: options.allowedRoleIds,
+        }), options);
     },
+    /** Constructs a positional URL argument. */
     url(options) {
-        const schema = z
-            .url({
+        return createPositionalDefinition(value.url({
             pattern: options.pattern,
             hostname: options.hostname,
             protocol: options.protocol,
-            error: "Must be a valid URL.",
-        })
-            .transform((value) => new URL(value));
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-        return {
-            type: "url",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            pattern: options.pattern,
-            hostname: options.hostname,
-            protocol: options.protocol,
-            autocomplete: options.autocomplete,
-            _schema: finalSchema,
-        };
+        }), options);
     },
-    /** Constructs an IANA timezone argument from names, cities, or safe aliases. */
+    /** Constructs a positional timezone argument. */
     timezone(options) {
-        const schema = z
-            .string({
-            error: "Must be a timezone.",
-        })
-            .transform((value, context) => {
-            const timezone = resolveTimezone(value);
-            if (!timezone) {
-                context.addIssue({
-                    code: "custom",
-                    message: "Could not resolve a valid timezone.",
-                });
-                return z.NEVER;
-            }
-            return timezone;
-        });
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-        return {
-            type: "timezone",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            autocomplete: options.autocomplete,
-            _schema: finalSchema,
-        };
+        return createPositionalDefinition(value.timezone(), options);
     },
-    /** Constructs a natural-language date/time argument parsed by Chrono. */
+    /** Constructs a positional natural-language time argument. */
     time(options) {
-        const resolvedTimezone = options.timezone
-            ? resolveTimezone(options.timezone)
-            : null;
-        if (options.timezone && !resolvedTimezone) {
-            throw new Error(`Invalid time argument timezone: "${options.timezone}".`);
-        }
-        const timezone = resolvedTimezone ?? undefined;
-        const forwardDate = options.forwardDate ?? false;
-        const strict = options.strict ?? false;
-        const schema = z
-            .string({
-            error: "Must be a date or time expression.",
-        })
-            .transform((value, context) => {
-            const reference = typeof options.reference === "function"
-                ? options.reference()
-                : options.reference;
-            const parsed = parseNaturalTime(value, {
-                reference,
-                timezone,
-                forwardDate,
-                strict,
-            });
-            if (!parsed) {
-                context.addIssue({
-                    code: "custom",
-                    message: "Could not parse a valid date or time.",
-                });
-                return z.NEVER;
-            }
-            return parsed;
+        return createPositionalDefinition(value.time({
+            reference: options.reference,
+            timezone: options.timezone,
+            forwardDate: options.forwardDate,
+            strict: options.strict,
+        }), options);
+    },
+    /**
+     * Constructs a positional union argument.
+     *
+     * Message commands try variants in declaration order.
+     */
+    union(options) {
+        return createPositionalDefinition(value.union(options.variants, {
+            slashVariant: options.slashVariant,
+        }), options);
+    },
+};
+/**
+ * Factory for named message-command options.
+ *
+ * Named options support the preferred `name:value` syntax and GNU-style
+ * `--name value`, `--name=value`, and short aliases.
+ */
+export const option = {
+    /** Constructs a named string option. */
+    string(options) {
+        const valueDefinition = value.string({
+            minLength: options.minLength,
+            maxLength: options.maxLength,
+            choices: getChoices(options.choices),
+            aliases: options.aliases,
         });
-        const isRequired = requiredValue(options.required);
-        const finalSchema = applyRequired(schema, isRequired);
-        return {
-            type: "time",
-            description: options.description,
-            required: isRequired,
-            rest: restValue(options.rest),
-            timezone,
-            forwardDate,
-            strict,
-            autocomplete: options.autocomplete,
-            _schema: finalSchema,
-        };
+        return createNamedDefinition(valueDefinition, options);
+    },
+    /** Constructs a named integer option. */
+    integer(options) {
+        const valueDefinition = value.integer({
+            min: options.min,
+            max: options.max,
+            choices: getChoices(options.choices),
+        });
+        return createNamedDefinition(valueDefinition, options);
+    },
+    /** Constructs a named number option. */
+    number(options) {
+        const valueDefinition = value.number({
+            min: options.min,
+            max: options.max,
+            choices: getChoices(options.choices),
+        });
+        return createNamedDefinition(valueDefinition, options);
+    },
+    /** Constructs a named boolean option. */
+    boolean(options) {
+        return createNamedDefinition(value.boolean(), options);
+    },
+    /** Constructs a named Discord user option. */
+    user(options) {
+        return createNamedDefinition(value.user(), options);
+    },
+    /** Constructs a named Discord guild-member option. */
+    member(options) {
+        return createNamedDefinition(value.member(), options);
+    },
+    /** Constructs a named Discord role option. */
+    role(options) {
+        return createNamedDefinition(value.role({
+            allowedRoleIds: options.allowedRoleIds,
+        }), options);
+    },
+    /** Constructs a named URL option. */
+    url(options) {
+        return createNamedDefinition(value.url({
+            pattern: options.pattern,
+            hostname: options.hostname,
+            protocol: options.protocol,
+        }), options);
+    },
+    /** Constructs a named timezone option. */
+    timezone(options) {
+        return createNamedDefinition(value.timezone(), options);
+    },
+    /** Constructs a named natural-language time option. */
+    time(options) {
+        return createNamedDefinition(value.time({
+            reference: options.reference,
+            timezone: options.timezone,
+            forwardDate: options.forwardDate,
+            strict: options.strict,
+        }), options);
+    },
+    /**
+     * Constructs a named union option.
+     *
+     * Message commands try variants in declaration order.
+     */
+    union(options) {
+        return createNamedDefinition(value.union(options.variants, {
+            slashVariant: options.slashVariant,
+        }), options);
     },
 };
 //# sourceMappingURL=builder.js.map

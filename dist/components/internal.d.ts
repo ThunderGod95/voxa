@@ -4,7 +4,7 @@
  * Returning the builder is supported for compatibility with Discord.js callback
  * conventions, but is not required.
  */
-export type BuilderConfigurer<Builder> = (builder: Builder) => Builder | void;
+export type BuilderConfigurer<Builder> = (builder: Builder) => Builder | undefined;
 /**
  * Applies a builder configuration callback while preserving the original
  * builder when the callback returns void.

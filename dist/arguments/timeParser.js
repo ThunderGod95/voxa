@@ -60,9 +60,7 @@ export function parseNaturalTime(input, options = {}) {
     if (!isValidDate(reference)) {
         return null;
     }
-    const timezone = options.timezone
-        ? resolveTimezone(options.timezone)
-        : null;
+    const timezone = options.timezone ? resolveTimezone(options.timezone) : null;
     if (options.timezone && !timezone) {
         return null;
     }

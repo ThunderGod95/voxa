@@ -34,11 +34,7 @@ function parseRegisteredCommand(value, fallbackGuildId) {
     const name = readString(value, "name");
     const version = readString(value, "version");
     const type = value.type;
-    if (!id ||
-        !applicationId ||
-        !name ||
-        !version ||
-        typeof type !== "number") {
+    if (!id || !applicationId || !name || !version || typeof type !== "number") {
         throw new TypeError("Discord returned an incomplete application-command response.");
     }
     return {
@@ -299,7 +295,9 @@ export class SlashCommandRegistrar {
         }
     }
     async overwriteScope(guildId, commands) {
-        const response = await this.client.put(this.getCollectionRoute(guildId), [...commands]);
+        const response = await this.client.put(this.getCollectionRoute(guildId), [
+            ...commands,
+        ]);
         return parseRegisteredCommandArray(response, guildId);
     }
     async upsertScope(guildId, commands, concurrency) {

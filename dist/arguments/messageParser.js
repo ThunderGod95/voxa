@@ -1,18 +1,46 @@
 import { getRoleFromInput, getUserFromInput } from "../resolvers";
+import { parseMessageSyntax } from "./messageSyntax";
+import { describeValueDefinition } from "./value";
+function requiresStringInput(name, input) {
+    if (typeof input === "string") {
+        return {
+            success: true,
+            value: input,
+        };
+    }
+    return {
+        success: false,
+        code: "INVALID_ARGUMENT",
+        message: `\`${name}\` expects a textual value.`,
+    };
+}
 /**
- * Resolves a single raw string token into its target type (User, Role, etc) via a Message context.
+ * Resolves one scalar message-command value.
  */
-async function resolveMessageValue(name, definition, input, message) {
+async function resolveScalarMessageValue(name, definition, input, message) {
     let rawValue = input;
     switch (definition.type) {
         case "string": {
-            if (definition.aliases) {
-                rawValue = definition.aliases[input] ?? input;
+            const stringInput = requiresStringInput(name, input);
+            if (!stringInput.success) {
+                return stringInput;
             }
+            rawValue = definition.aliases?.[stringInput.value] ?? stringInput.value;
             break;
         }
+        case "integer":
+        case "number":
+        case "boolean":
+        case "url":
+        case "timezone":
+        case "time":
+            break;
         case "user": {
-            const user = await getUserFromInput(input, message);
+            const stringInput = requiresStringInput(name, input);
+            if (!stringInput.success) {
+                return stringInput;
+            }
+            const user = await getUserFromInput(stringInput.value, message);
             if (!user) {
                 return {
                     success: false,
@@ -24,6 +52,10 @@ async function resolveMessageValue(name, definition, input, message) {
             break;
         }
         case "member": {
+            const stringInput = requiresStringInput(name, input);
+            if (!stringInput.success) {
+                return stringInput;
+            }
             if (!message.guild) {
                 return {
                     success: false,
@@ -31,7 +63,7 @@ async function resolveMessageValue(name, definition, input, message) {
                     message: `\`${name}\` can only be used in a server.`,
                 };
             }
-            const user = await getUserFromInput(input, message);
+            const user = await getUserFromInput(stringInput.value, message);
             if (!user) {
                 return {
                     success: false,
@@ -53,6 +85,10 @@ async function resolveMessageValue(name, definition, input, message) {
             break;
         }
         case "role": {
+            const stringInput = requiresStringInput(name, input);
+            if (!stringInput.success) {
+                return stringInput;
+            }
             if (!message.guild) {
                 return {
                     success: false,
@@ -60,7 +96,7 @@ async function resolveMessageValue(name, definition, input, message) {
                     message: `\`${name}\` can only be used in a server.`,
                 };
             }
-            const role = getRoleFromInput(input, message.guild, definition.allowedRoleIds);
+            const role = getRoleFromInput(stringInput.value, message.guild, definition.allowedRoleIds);
             if (!role) {
                 return {
                     success: false,
@@ -77,49 +113,81 @@ async function resolveMessageValue(name, definition, input, message) {
         return {
             success: false,
             code: "INVALID_ARGUMENT",
-            message: `\`${name}\`: ${validation.error.issues[0]?.message ?? "Invalid argument."}`,
+            message: `\`${name}\`: ` +
+                (validation.error.issues[0]?.message ?? "Invalid argument."),
         };
     }
-    return { success: true, value: validation.data };
+    return {
+        success: true,
+        value: validation.data,
+    };
 }
 /**
- * Parses and maps a sequence of tokenized string arguments against a defined schema.
+ * Resolves a semantic value, including heterogeneous unions.
+ */
+async function resolveMessageValue(name, definition, input, message) {
+    if (definition.type !== "union") {
+        return resolveScalarMessageValue(name, definition, input, message);
+    }
+    for (const variant of definition.variants) {
+        const resolved = await resolveScalarMessageValue(name, variant, input, message);
+        if (resolved.success) {
+            return resolved;
+        }
+    }
+    return {
+        success: false,
+        code: "INVALID_ARGUMENT",
+        message: `\`${name}\` must match one of: ` +
+            `${describeValueDefinition(definition)}.`,
+    };
+}
+function missingArgument(name) {
+    return {
+        success: false,
+        error: {
+            code: "MISSING_ARGUMENT",
+            argument: name,
+            message: `Missing required argument: \`${name}\`.`,
+        },
+    };
+}
+/**
+ * Parses and resolves message-command arguments.
  *
- * @param schema - The ArgumentSchema structure for the command.
- * @param message - The Discord Message that triggered the command.
- * @param tokens - An array of raw string tokens extracted from the message.
- * @returns A result object containing the validated, strongly-typed arguments or an error.
+ * CLI grammar is handled by messageSyntax.ts. This layer only maps raw
+ * positionals/options onto their semantic Voxa value definitions.
  */
 export async function parseMessageArguments(schema, message, tokens) {
+    const syntax = parseMessageSyntax(schema, tokens);
+    if (!syntax.success) {
+        return syntax;
+    }
     const parsed = {};
-    let tokenIndex = 0;
-    for (const [name, definition] of Object.entries(schema)) {
-        const input = definition.rest
-            ? tokenIndex < tokens.length
-                ? tokens.slice(tokenIndex).join(" ")
-                : undefined
-            : tokens[tokenIndex];
+    const positionalDefinitions = Object.entries(schema).filter((entry) => entry[1].placement === "positional");
+    let positionalIndex = 0;
+    for (const [name, definition] of positionalDefinitions) {
+        let input;
         if (definition.rest) {
-            tokenIndex = tokens.length;
+            if (positionalIndex < syntax.value.positionals.length) {
+                input = syntax.value.positionals.slice(positionalIndex).join(" ");
+            }
+            positionalIndex = syntax.value.positionals.length;
         }
-        else if (input !== undefined) {
-            tokenIndex++;
+        else {
+            input = syntax.value.positionals[positionalIndex];
+            if (input !== undefined) {
+                positionalIndex++;
+            }
         }
         if (input === undefined) {
             if (definition.required) {
-                return {
-                    success: false,
-                    error: {
-                        code: "MISSING_ARGUMENT",
-                        argument: name,
-                        message: `Missing required argument: \`${name}\`.`,
-                    },
-                };
+                return missingArgument(name);
             }
             parsed[name] = null;
             continue;
         }
-        const resolved = await resolveMessageValue(name, definition, input, message);
+        const resolved = await resolveMessageValue(name, definition.value, input, message);
         if (!resolved.success) {
             return {
                 success: false,
@@ -132,14 +200,39 @@ export async function parseMessageArguments(schema, message, tokens) {
         }
         parsed[name] = resolved.value;
     }
-    if (tokenIndex < tokens.length) {
+    if (positionalIndex < syntax.value.positionals.length) {
         return {
             success: false,
             error: {
                 code: "TOO_MANY_ARGUMENTS",
-                message: "Too many arguments were provided.",
+                message: "Too many positional arguments were provided.",
             },
         };
+    }
+    for (const [name, definition] of Object.entries(schema)) {
+        if (definition.placement !== "option") {
+            continue;
+        }
+        const input = syntax.value.options[name];
+        if (input === undefined) {
+            if (definition.required) {
+                return missingArgument(name);
+            }
+            parsed[name] = null;
+            continue;
+        }
+        const resolved = await resolveMessageValue(name, definition.value, input, message);
+        if (!resolved.success) {
+            return {
+                success: false,
+                error: {
+                    code: resolved.code,
+                    argument: name,
+                    message: resolved.message,
+                },
+            };
+        }
+        parsed[name] = resolved.value;
     }
     return {
         success: true,

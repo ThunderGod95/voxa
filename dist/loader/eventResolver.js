@@ -28,8 +28,7 @@ function validateEventDefinition(candidate) {
         if (typeof candidate.name === "string") {
             return {
                 success: false,
-                error: `"${candidate.name}" is not a supported ` +
-                    "Discord client event.",
+                error: `"${candidate.name}"·is·not·a·supported·Discord·client·event.`,
             };
         }
         return {
@@ -78,8 +77,7 @@ export function resolveEventModules(modules) {
         if (candidate === undefined) {
             response.skipped.push({
                 file: loadedModule.relativePath,
-                reason: "Module does not export an event as " +
-                    'default or as "event".',
+                reason: "Module does not export an event as " + 'default or as "event".',
             });
             continue;
         }

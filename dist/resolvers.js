@@ -111,8 +111,7 @@ export function getRoleFromInput(input, guild, allowedRoleIds) {
     let lowestDistance = Number.POSITIVE_INFINITY;
     for (const role of candidates.values()) {
         const currentDistance = distance(lowerInput, role.name.toLowerCase());
-        if (currentDistance < lowestDistance &&
-            currentDistance <= maxDistance) {
+        if (currentDistance < lowestDistance && currentDistance <= maxDistance) {
             lowestDistance = currentDistance;
             closestRole = role;
         }

@@ -55,8 +55,7 @@ export class CommandInvocation {
             this.resolvedMember =
                 source.raw.member instanceof GuildMember
                     ? source.raw.member
-                    : (source.raw.guild?.members.resolve(source.raw.user.id) ??
-                        null);
+                    : (source.raw.guild?.members.resolve(source.raw.user.id) ?? null);
         }
         else {
             this.user = source.raw.author;

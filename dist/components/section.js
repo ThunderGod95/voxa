@@ -12,9 +12,7 @@ export class V2SectionBuilder {
     builder;
     constructor(source = {}) {
         this.builder =
-            source instanceof SectionBuilder
-                ? source
-                : new SectionBuilder(source);
+            source instanceof SectionBuilder ? source : new SectionBuilder(source);
     }
     /** Number of text displays currently contained by the section. */
     get textCount() {

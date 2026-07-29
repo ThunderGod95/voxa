@@ -102,9 +102,7 @@ function createNestedSlashCommandBuilder(rootName, routes) {
         }
         const group = assertConsistentGroupMetadata(groupRoutes, 1);
         builder.addSubcommandGroup((subcommandGroup) => {
-            subcommandGroup
-                .setName(groupName)
-                .setDescription(group.description);
+            subcommandGroup.setName(groupName).setDescription(group.description);
             const sortedRoutes = [...groupRoutes].sort((left, right) => createRouteKey(left.path).localeCompare(createRouteKey(right.path)));
             for (const route of sortedRoutes) {
                 subcommandGroup.addSubcommand((subcommand) => {

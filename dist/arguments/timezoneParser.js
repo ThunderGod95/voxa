@@ -203,8 +203,7 @@ export const resolveTimezone = (input) => {
                     timezone: timezone.name,
                     score: 100 +
                         typoDistance * 10 +
-                        Math.abs(timezone.normalizedCity.length -
-                            normalizedInput.length),
+                        Math.abs(timezone.normalizedCity.length - normalizedInput.length),
                 };
                 if (isBetterCandidate(bestCandidate, candidate)) {
                     bestCandidate = candidate;
