@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { formatArgumentUsage, parseInteractionArguments, parseMessageArguments, respondToArgumentAutocomplete, tokenizeArguments, } from "../arguments";
 import { CommandContext, defaultCommandFeedbackRenderer, defaultCommandLogger, } from "../context";
+import { createGeneratedHelpRoute, resolveHelpCommandOptions, } from "../help";
 import { CommandAccessController, isSlashRouteEnabled } from "./access";
 import { EMPTY_ARGUMENTS, } from "./command";
 import { CommandRouteRegistry } from "./route";
@@ -13,6 +14,7 @@ function resolveCommandHandlerConfig(config) {
         feedbackRenderer: config.feedbackRenderer ?? defaultCommandFeedbackRenderer,
         isIgnored: config.isIgnored,
         allowBots: config.allowBots ?? false,
+        help: resolveHelpCommandOptions(config.help),
     };
 }
 /**
@@ -58,6 +60,15 @@ export class CommandManager extends EventEmitter {
         this.routes = this.registry.routes;
         this.commands = this.registry.commands;
         this.accessController = new CommandAccessController(this.config);
+        if (this.config.help) {
+            this.registry.register([
+                createGeneratedHelpRoute(this.config.help, {
+                    getRoutes: () => [...this.routes.values()],
+                    isDeveloper: (userId) => this.config.devIds.includes(userId),
+                    resolvePrefix: (context) => this.resolveHelpPrefix(context),
+                }),
+            ]);
+        }
         CommandManager._instance = this;
     }
     /**
@@ -229,6 +240,16 @@ export class CommandManager extends EventEmitter {
     resolvePrefix(message) {
         const prefix = this.config.prefix;
         return Promise.resolve(typeof prefix === "function" ? prefix(message) : prefix);
+    }
+    resolveHelpPrefix(context) {
+        const prefix = this.config.prefix;
+        if (typeof prefix === "string") {
+            return Promise.resolve(prefix);
+        }
+        const message = context.message;
+        return message
+            ? Promise.resolve(prefix(message))
+            : Promise.resolve("<prefix>");
     }
     createContext(payload, args) {
         return new CommandContext(payload, args, {

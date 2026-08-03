@@ -14,7 +14,12 @@ function getSegmentAliases(route, index) {
     }
     return route.groups?.[index]?.aliases ?? [];
 }
-function createLookupKeys(route, segmentCount) {
+/**
+ * Produces every canonical and aliased lookup key for a route prefix.
+ *
+ * @internal
+ */
+export function createRoutePrefixLookupKeys(route, segmentCount) {
     const variants = route.path
         .slice(0, segmentCount)
         .map((segment, index) => [segment, ...getSegmentAliases(route, index)]);
@@ -33,7 +38,7 @@ function createLookupKeys(route, segmentCount) {
  * @internal
  */
 export function createRouteLookupKeys(route) {
-    return createLookupKeys(route, route.path.length);
+    return createRoutePrefixLookupKeys(route, route.path.length);
 }
 /**
  * Produces every canonical and aliased parent lookup key for a message-default
@@ -48,7 +53,7 @@ export function createMessageDefaultLookupKeys(route) {
     if (!route.command.messageDefault || route.path.length < 2) {
         return [];
     }
-    return createLookupKeys(route, route.path.length - 1);
+    return createRoutePrefixLookupKeys(route, route.path.length - 1);
 }
 /**
  * Stores canonical command routes, prefix-command alias lookups, and
@@ -86,13 +91,16 @@ export class CommandRouteRegistry {
         for (const route of routes) {
             validateCommandRoute(route);
             const canonicalKey = createRouteKey(route.path);
-            if (this.routes.has(canonicalKey) || stagedCanonical.has(canonicalKey)) {
+            if (this.routes.has(canonicalKey) ||
+                stagedCanonical.has(canonicalKey)) {
                 throw new Error(`Command route "${canonicalKey}" is already registered.`);
             }
             stagedCanonical.set(canonicalKey, route);
             for (const lookupKey of createRouteLookupKeys(route)) {
-                const existing = stagedLookup.get(lookupKey) ?? this.routeLookup.get(lookupKey);
-                if (existing && createRouteKey(existing.path) !== canonicalKey) {
+                const existing = stagedLookup.get(lookupKey) ??
+                    this.routeLookup.get(lookupKey);
+                if (existing &&
+                    createRouteKey(existing.path) !== canonicalKey) {
                     throw new Error(`Command route or alias "${lookupKey}" is already ` +
                         `registered by "${existing.path.join(" ")}".`);
                 }
@@ -101,7 +109,8 @@ export class CommandRouteRegistry {
             for (const lookupKey of createMessageDefaultLookupKeys(route)) {
                 const existing = stagedMessageDefaults.get(lookupKey) ??
                     this.messageDefaultLookup.get(lookupKey);
-                if (existing && createRouteKey(existing.path) !== canonicalKey) {
+                if (existing &&
+                    createRouteKey(existing.path) !== canonicalKey) {
                     throw new Error(`Message-default route "${lookupKey}" is already ` +
                         `registered by "${existing.path.join(" ")}".`);
                 }

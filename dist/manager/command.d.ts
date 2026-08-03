@@ -1,6 +1,7 @@
 import type { Message, PermissionResolvable } from "discord.js";
 import type { ArgumentSchema, ParsedArguments } from "../arguments";
 import type { CommandContext, CommandFeedbackRenderer, CommandLogger } from "../context";
+import type { HelpCommandConfig } from "../help/types";
 /** @internal Empty schema used by commands that declare no arguments. */
 export declare const EMPTY_ARGUMENTS: {};
 /**
@@ -239,5 +240,14 @@ export interface CommandHandlerConfig {
      * @defaultValue false
      */
     allowBots?: boolean;
+    /**
+     * Controls Voxa's generated help command.
+     *
+     * Pass `false` to disable it, `true` to use defaults, or an options
+     * object to customize its name, presentation, and behavior.
+     *
+     * @defaultValue true
+     */
+    help?: HelpCommandConfig;
 }
 //# sourceMappingURL=command.d.ts.map

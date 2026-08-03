@@ -130,6 +130,7 @@ export declare class CommandManager extends EventEmitter {
     private handleAutocompleteInteraction;
     private resolveInteractionRoute;
     private resolvePrefix;
+    private resolveHelpPrefix;
     private createContext;
     private executeCommand;
 }

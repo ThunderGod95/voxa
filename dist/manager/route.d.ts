@@ -37,6 +37,12 @@ export interface CommandRoute {
  */
 export declare function createRouteKey(path: readonly string[]): string;
 /**
+ * Produces every canonical and aliased lookup key for a route prefix.
+ *
+ * @internal
+ */
+export declare function createRoutePrefixLookupKeys(route: CommandRoute, segmentCount: number): string[];
+/**
  * Produces every canonical and aliased lookup key for a prefix route.
  *
  * For example, a route whose root and leaf both have one alias produces all
