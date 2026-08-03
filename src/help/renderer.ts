@@ -1,7 +1,9 @@
 import {
     ButtonStyle,
     type InteractionUpdateOptions,
+    inlineCode,
     MessageFlags,
+    quote,
     SeparatorSpacingSize,
 } from "discord.js";
 import { component } from "../components";
@@ -15,7 +17,6 @@ import {
     formatCommandPath,
     formatMessageDefaultUsage,
     formatMessageUsage,
-    formatSlashUsage,
     formatTargetLabel,
 } from "./format";
 import type { ResolvedHelpCommandOptions } from "./types";
@@ -55,7 +56,7 @@ function truncate(value: string, maximumLength: number): string {
 function formatEntry(target: HelpTarget): string {
     const count =
         target.kind === "group"
-            ? ` · ${target.routes.length} command${
+            ? ` • ${target.routes.length} command${
                   target.routes.length === 1 ? "" : "s"
               }`
             : "";
@@ -100,33 +101,39 @@ function addNavigation(
     }
 
     container.actionRow((row) => {
-        row.button({
-            customId: context.ids.previous,
-            label: "Previous",
-            style: ButtonStyle.Secondary,
-            disabled: disabled || page <= 0,
-        });
+        if (pageCount > 1) {
+            row.button({
+                customId: context.ids.previous,
+                label: "Previous",
+                style: ButtonStyle.Secondary,
+                disabled: disabled || page <= 0,
+            });
 
-        row.button({
-            customId: context.ids.next,
-            label: "Next",
-            style: ButtonStyle.Secondary,
-            disabled: disabled || page >= pageCount - 1,
-        });
+            row.button({
+                customId: context.ids.next,
+                label: "Next",
+                style: ButtonStyle.Secondary,
+                disabled: disabled || page >= pageCount - 1,
+            });
+        }
 
-        row.button({
-            customId: context.ids.back,
-            label: "Back",
-            style: ButtonStyle.Secondary,
-            disabled: disabled || !canGoBack,
-        });
+        if (canGoBack) {
+            row.button({
+                customId: context.ids.back,
+                label: "Back",
+                style: ButtonStyle.Secondary,
+                disabled: disabled,
+            });
+        }
 
-        row.button({
-            customId: context.ids.home,
-            label: "All commands",
-            style: ButtonStyle.Primary,
-            disabled: disabled || context.state.target === null,
-        });
+        if (context.state.target !== null) {
+            row.button({
+                customId: context.ids.home,
+                label: "All commands",
+                style: ButtonStyle.Primary,
+                disabled: disabled,
+            });
+        }
 
         return row;
     });
@@ -143,7 +150,7 @@ function renderOverview(
 
     container
         .text(
-            `# ${context.options.title}\n` +
+            `## ${context.options.title}\n` +
                 `${context.options.intro}\n\n` +
                 `Open an entry below, or use ` +
                 `\`${escapeInlineCode(context.prefix)}` +
@@ -151,7 +158,7 @@ function renderOverview(
                 "for direct lookup.",
         )
         .separator({
-            spacing: SeparatorSpacingSize.Small,
+            spacing: SeparatorSpacingSize.Large,
             divider: true,
         });
 
@@ -162,7 +169,7 @@ function renderOverview(
     );
 
     container.separator({
-        spacing: SeparatorSpacingSize.Small,
+        spacing: SeparatorSpacingSize.Large,
         divider: true,
     });
 
@@ -188,14 +195,14 @@ function renderGroup(
 
     container
         .text(
-            `# ${formatTargetLabel(target.path)}\n` +
+            `## ${formatTargetLabel(target.path)}\n` +
                 `${target.description}\n\n` +
                 `${target.routes.length} registered command${
                     target.routes.length === 1 ? "" : "s"
                 } in this group.`,
         )
         .separator({
-            spacing: SeparatorSpacingSize.Small,
+            spacing: SeparatorSpacingSize.Large,
             divider: true,
         });
 
@@ -206,7 +213,7 @@ function renderGroup(
     );
 
     container.separator({
-        spacing: SeparatorSpacingSize.Small,
+        spacing: SeparatorSpacingSize.Large,
         divider: true,
     });
 
@@ -225,24 +232,21 @@ function renderCommand(
     target: HelpCommandTarget,
 ): ReturnType<typeof component.container> {
     const route = target.route;
-    const slashUsage = formatSlashUsage(route);
 
     const defaultUsage = formatMessageDefaultUsage(route, context.prefix);
-
     const argumentEntries = formatArgumentEntries(
         route.command.arguments ?? {},
     );
 
     const argumentPageSize = Math.min(context.options.pageSize, 5);
-
     const argumentStart = context.state.page * argumentPageSize;
-
     const visibleArguments = argumentEntries.slice(
         argumentStart,
         argumentStart + argumentPageSize,
     );
 
     const aliases = formatAliases(route);
+    const access = formatAccess(route);
 
     const container = component.container();
 
@@ -250,26 +254,30 @@ function renderCommand(
         container.accentColor(context.options.accentColor);
     }
 
+    const headerText = [
+        `## ${formatTargetLabel(route.path)}`,
+        quote(route.command.description),
+        "",
+        aliases,
+    ]
+        .filter((line): line is string => line !== null)
+        .join("\n");
+
     container
-        .text(
-            `# ${formatTargetLabel(route.path)}\n${route.command.description}`,
-        )
+        .text(headerText)
         .separator({
-            spacing: SeparatorSpacingSize.Small,
+            spacing: SeparatorSpacingSize.Large,
             divider: true,
         })
         .text(
             [
-                "## Usage",
-                `**Message:** \`${escapeInlineCode(
-                    formatMessageUsage(route, context.prefix),
-                )}\``,
+                "### Syntax",
+                inlineCode(formatMessageUsage(route, context.prefix)),
                 defaultUsage
                     ? `**Message default:** \`${escapeInlineCode(defaultUsage)}\``
                     : null,
-                slashUsage
-                    ? `**Slash:** \`${escapeInlineCode(slashUsage)}\``
-                    : "**Slash:** Not registered",
+                "",
+                `${inlineCode("<>")} required • ${inlineCode("[]")} optional`,
             ]
                 .filter((line): line is string => line !== null)
                 .join("\n"),
@@ -277,34 +285,27 @@ function renderCommand(
 
     if (visibleArguments.length > 0) {
         const rangeEnd = argumentStart + visibleArguments.length;
+        let argumentsText = `## Arguments\n${visibleArguments.join("\n\n")}`;
+
+        if (argumentEntries.length > argumentPageSize) {
+            argumentsText += `\n\n-# Showing ${argumentStart + 1}–${rangeEnd} of ${argumentEntries.length}`;
+        }
 
         container
             .separator({
-                spacing: SeparatorSpacingSize.Small,
+                spacing: SeparatorSpacingSize.Large,
                 divider: true,
             })
-            .text(
-                `## Arguments\n` +
-                    `${visibleArguments.join("\n\n")}\n\n` +
-                    `-# Showing ${argumentStart + 1}–` +
-                    `${rangeEnd} of ${argumentEntries.length}`,
-            );
+            .text(argumentsText);
     }
 
-    container
-        .separator({
-            spacing: SeparatorSpacingSize.Small,
-            divider: true,
-        })
-        .text(`## Access\n${formatAccess(route)}`);
-
-    if (aliases) {
+    if (access) {
         container
             .separator({
-                spacing: SeparatorSpacingSize.Small,
+                spacing: SeparatorSpacingSize.Large,
                 divider: true,
             })
-            .text(`## Prefix aliases\n${aliases}`);
+            .text(access);
     }
 
     addNavigation(container, context);
@@ -335,7 +336,7 @@ export function renderHelpNotFound(
     }
 
     container.text(
-        "# Command not found\n" +
+        "## Command not found\n" +
             "No command or command group named " +
             `\`${escapeInlineCode(requestedPath)}\` ` +
             `exists.${suggestionText}\n\n` +

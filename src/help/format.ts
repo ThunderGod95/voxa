@@ -1,19 +1,18 @@
-import { type PermissionResolvable, PermissionsBitField } from "discord.js";
+import {
+    inlineCode,
+    type PermissionResolvable,
+    PermissionsBitField,
+} from "discord.js";
 import {
     type ArgumentChoiceValue,
     type ArgumentSchema,
     type ArgumentValueDefinition,
-    type CommandArgumentDefinition,
     describeValueDefinition,
     formatArgumentUsage,
-    getMessageOptionKind,
     resolveArgumentChoices,
     type ScalarValueDefinition,
 } from "../arguments";
-import {
-    getEffectiveCommandAccess,
-    isSlashRouteEnabled,
-} from "../manager/access";
+import { getEffectiveCommandAccess } from "../manager/access";
 import type { CommandRoute } from "../manager/route";
 
 const MAX_DISPLAYED_CHOICES = 5;
@@ -36,7 +35,7 @@ export function formatCommandPath(path: readonly string[]): string {
 }
 
 export function formatTargetLabel(path: readonly string[]): string {
-    return `/${formatCommandPath(path)}`;
+    return `${inlineCode(`/${formatCommandPath(path)}`)}`;
 }
 
 export function formatMessageUsage(
@@ -63,23 +62,6 @@ export function formatMessageDefaultUsage(
     return usage ? `${command} ${usage}` : command;
 }
 
-export function formatSlashUsage(route: CommandRoute): string | null {
-    if (!isSlashRouteEnabled(route)) {
-        return null;
-    }
-
-    const schema = route.command.arguments ?? {};
-    const argumentsUsage = Object.entries(schema)
-        .map(([name, definition]) =>
-            definition.required ? `<${name}>` : `[${name}]`,
-        )
-        .join(" ");
-
-    const command = `/${formatCommandPath(route.path)}`;
-
-    return argumentsUsage ? `${command} ${argumentsUsage}` : command;
-}
-
 function formatChoiceValues(definition: ScalarValueDefinition): string | null {
     if (
         (definition.type !== "string" &&
@@ -102,28 +84,35 @@ function formatChoiceValues(definition: ScalarValueDefinition): string | null {
 
         return name === value
             ? `\`${escapeInlineCode(value)}\``
-            : `\`${escapeInlineCode(name)}\` → ` +
-                  `\`${escapeInlineCode(value)}\``;
+            : `\`${escapeInlineCode(name)}\` (\`${escapeInlineCode(value)}\`)`;
     });
 
     const remaining = choices.length - visible.length;
 
-    return [visible.join(", "), remaining > 0 ? `and ${remaining} more` : null]
+    return [visible.join(", "), remaining > 0 ? `(+${remaining} more)` : null]
         .filter((part): part is string => part !== null && part.length > 0)
         .join(" ");
 }
 
-function formatScalarConstraints(definition: ScalarValueDefinition): string[] {
-    const constraints: string[] = [];
+interface FormattedConstraints {
+    inline: string[];
+    blocks: string[];
+}
+
+function formatScalarConstraints(
+    definition: ScalarValueDefinition,
+): FormattedConstraints {
+    const inline: string[] = [];
+    const blocks: string[] = [];
 
     switch (definition.type) {
         case "string":
             if (definition.minLength !== undefined) {
-                constraints.push(`minimum ${definition.minLength} characters`);
+                inline.push(`Min length: ${definition.minLength}`);
             }
 
             if (definition.maxLength !== undefined) {
-                constraints.push(`maximum ${definition.maxLength} characters`);
+                inline.push(`Max length: ${definition.maxLength}`);
             }
 
             if (definition.aliases !== undefined) {
@@ -133,27 +122,27 @@ function formatScalarConstraints(definition: ScalarValueDefinition): string[] {
                         ([alias, value]) =>
                             `\`${escapeInlineCode(
                                 truncateInlineValue(alias),
-                            )}\`→\`${escapeInlineCode(truncateInlineValue(value))}\``,
+                            )}\` (\`${escapeInlineCode(truncateInlineValue(value))}\`)`,
                     );
 
-                constraints.push(`message aliases: ${aliases.join(", ")}`);
+                blocks.push(`- **Aliases:** ${aliases.join(", ")}`);
             }
             break;
 
         case "integer":
         case "number":
             if (definition.min !== undefined) {
-                constraints.push(`minimum ${definition.min}`);
+                inline.push(`Min: ${definition.min}`);
             }
 
             if (definition.max !== undefined) {
-                constraints.push(`maximum ${definition.max}`);
+                inline.push(`Max: ${definition.max}`);
             }
             break;
 
         case "role":
             if (definition.allowedRoleIds !== undefined) {
-                constraints.push(
+                inline.push(
                     `${definition.allowedRoleIds.length} allowed role${
                         definition.allowedRoleIds.length === 1 ? "" : "s"
                     }`,
@@ -163,29 +152,29 @@ function formatScalarConstraints(definition: ScalarValueDefinition): string[] {
 
         case "url":
             if (definition.hostname !== undefined) {
-                constraints.push("restricted hostname");
+                inline.push("Restricted hostname");
             }
 
             if (definition.protocol !== undefined) {
-                constraints.push("restricted protocol");
+                inline.push("Restricted protocol");
             }
 
             if (definition.pattern !== undefined) {
-                constraints.push("custom URL pattern");
+                inline.push("Custom URL pattern");
             }
             break;
 
         case "time":
             if (definition.timezone !== undefined) {
-                constraints.push(`timezone ${definition.timezone}`);
+                inline.push(`Timezone: ${definition.timezone}`);
             }
 
             if (definition.forwardDate) {
-                constraints.push("prefers future dates");
+                inline.push("Prefers future dates");
             }
 
             if (definition.strict) {
-                constraints.push("strict parsing");
+                inline.push("Strict parsing");
             }
             break;
 
@@ -199,74 +188,55 @@ function formatScalarConstraints(definition: ScalarValueDefinition): string[] {
     const choices = formatChoiceValues(definition);
 
     if (choices) {
-        constraints.push(`choices: ${choices}`);
+        blocks.push(`- **Choices:** ${choices}`);
     }
 
-    return constraints;
+    return { inline, blocks };
 }
 
-function formatValueConstraints(definition: ArgumentValueDefinition): string[] {
+function formatValueConstraints(
+    definition: ArgumentValueDefinition,
+): FormattedConstraints {
     if (definition.type !== "union") {
         return formatScalarConstraints(definition);
     }
 
-    const constraints = definition.variants.flatMap(formatScalarConstraints);
+    const constraints = definition.variants.map(formatScalarConstraints);
 
-    return [...new Set(constraints)];
-}
-
-function formatArgumentSyntax(
-    name: string,
-    definition: CommandArgumentDefinition,
-): string {
-    if (definition.placement === "positional") {
-        return definition.rest ? `${name}…` : name;
-    }
-
-    const optionKind = getMessageOptionKind(definition.value);
-
-    const canonical =
-        optionKind === "boolean"
-            ? `${name}:true|false · --${name} · --no-${name}`
-            : `${name}:value · --${name} value`;
-
-    const aliases = [
-        definition.short
-            ? `-${definition.short}${optionKind === "boolean" ? "" : " value"}`
-            : null,
-        ...definition.longAliases.map((alias) =>
-            optionKind === "boolean"
-                ? `${alias}:true|false · --${alias} · --no-${alias}`
-                : `${alias}:value · --${alias} value`,
-        ),
-    ].filter((alias): alias is string => alias !== null);
-
-    return aliases.length > 0
-        ? `${canonical} · ${aliases.join(" · ")}`
-        : canonical;
+    return {
+        inline: [...new Set(constraints.flatMap((c) => c.inline))],
+        blocks: [...new Set(constraints.flatMap((c) => c.blocks))],
+    };
 }
 
 export function formatArgumentEntries(schema: ArgumentSchema): string[] {
     return Object.entries(schema).map(([name, definition]) => {
+        let typeDescription = describeValueDefinition(definition.value);
+
+        if (typeDescription.includes("|") && typeDescription.length > 25) {
+            typeDescription = "Multiple options";
+        }
+
+        const formattedType =
+            typeDescription.charAt(0).toUpperCase() + typeDescription.slice(1);
+        const constraints = formatValueConstraints(definition.value);
+
         const metadata = [
-            definition.required ? "required" : "optional",
-            definition.placement === "positional"
-                ? "positional"
-                : "named option",
-            describeValueDefinition(definition.value),
-            definition.autocomplete ? "autocomplete" : null,
-            ...formatValueConstraints(definition.value),
+            definition.required ? "**Required**" : "Optional",
+            formattedType,
+            definition.autocomplete ? "Supports autocomplete" : null,
+            ...constraints.inline,
         ].filter(
             (value): value is string => value !== null && value.length > 0,
         );
 
-        return [
-            `**\`${escapeInlineCode(name)}\`** — ` + definition.description,
-            `- Syntax: \`${escapeInlineCode(
-                formatArgumentSyntax(name, definition),
-            )}\``,
-            `- ${metadata.join(" · ")}`,
-        ].join("\n");
+        const lines = [
+            `**\`${escapeInlineCode(name)}\`** — ${definition.description}`,
+            `- ${metadata.join(" • ")}`,
+            ...constraints.blocks,
+        ];
+
+        return lines.join("\n");
     });
 }
 
@@ -282,23 +252,9 @@ function formatPermissions(
     return resolved.map((permission) => `\`${permission}\``).join(", ");
 }
 
-export function formatAccess(route: CommandRoute): string {
+export function formatAccess(route: CommandRoute): string | null {
     const access = getEffectiveCommandAccess(route);
-
-    const availability = [
-        isSlashRouteEnabled(route) ? "slash" : null,
-        "message",
-    ].filter((value): value is string => value !== null);
-
-    const lines = [
-        `**Available through:** ${availability.join(" and ")} commands`,
-    ];
-
-    if (access.guildOnly) {
-        lines.push("**Context:** Server only");
-    } else {
-        lines.push("**Context:** Servers and direct messages");
-    }
+    const lines: string[] = [];
 
     if (access.devOnly) {
         lines.push("**Visibility:** Bot developers only");
@@ -307,40 +263,34 @@ export function formatAccess(route: CommandRoute): string {
     const userPermissions = formatPermissions(access.userPermissions);
 
     if (userPermissions) {
-        lines.push(`**User permissions:** ${userPermissions}`);
+        lines.push(`**Required permissions:** ${userPermissions}`);
     }
 
-    const botPermissions = formatPermissions(access.botPermissions);
-
-    if (botPermissions) {
-        lines.push(`**Bot permissions:** ${botPermissions}`);
-    }
-
-    return lines.join("\n");
+    return lines.length > 0 ? `### Access\n\n${lines.join("\n")}` : null;
 }
 
 export function formatAliases(route: CommandRoute): string | null {
-    const parts: string[] = [];
+    const allAliases: string[] = [];
 
-    for (const [index, group] of (route.groups ?? []).entries()) {
-        if (!group.aliases || group.aliases.length === 0) {
-            continue;
+    for (const group of route.groups ?? []) {
+        if (group.aliases && group.aliases.length > 0) {
+            allAliases.push(
+                ...group.aliases.map(
+                    (alias) => `\`${escapeInlineCode(alias)}\``,
+                ),
+            );
         }
-
-        parts.push(
-            `**${route.path[index]}:** ${group.aliases
-                .map((alias) => `\`${escapeInlineCode(alias)}\``)
-                .join(", ")}`,
-        );
     }
 
     if (route.command.aliases && route.command.aliases.length > 0) {
-        parts.push(
-            `**${route.command.name}:** ${route.command.aliases
-                .map((alias) => `\`${escapeInlineCode(alias)}\``)
-                .join(", ")}`,
+        allAliases.push(
+            ...route.command.aliases.map(
+                (alias) => `\`${escapeInlineCode(alias)}\``,
+            ),
         );
     }
 
-    return parts.length > 0 ? parts.join("\n") : null;
+    return allAliases.length > 0
+        ? `**Aliases:** ${allAliases.join(", ")}`
+        : null;
 }

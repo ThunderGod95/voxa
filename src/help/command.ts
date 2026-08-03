@@ -1,11 +1,11 @@
 import {
-    ComponentType,
     type ButtonInteraction,
+    ComponentType,
     type StringSelectMenuInteraction,
 } from "discord.js";
 import { argument, type ParsedArguments } from "../arguments";
 import type { CommandContext } from "../context";
-import { defineCommand, type Command } from "../manager/command";
+import { type Command, defineCommand } from "../manager/command";
 import type { CommandRoute } from "../manager/route";
 import {
     HelpCatalog,
@@ -14,10 +14,10 @@ import {
     type HelpTarget,
 } from "./catalog";
 import {
+    type HelpComponentIds,
     renderHelp,
     renderHelpNotFound,
     toHelpInteractionUpdate,
-    type HelpComponentIds,
 } from "./renderer";
 import type { ResolvedHelpCommandOptions } from "./types";
 

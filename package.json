@@ -15,6 +15,7 @@
         "dist"
     ],
     "scripts": {
+        "dev": "tsc -p tsconfig.build.json --watch",
         "build": "tsc -p tsconfig.build.json",
         "test": "bun test",
         "check": "biome check src tests",

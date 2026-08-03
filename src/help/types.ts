@@ -107,7 +107,7 @@ const DEFAULT_HELP_OPTIONS: ResolvedHelpCommandOptions = {
     slash: true,
     title: "Command Reference",
     intro: "Browse every command registered with this bot, then open an entry for syntax, arguments, aliases, and access requirements.",
-    accentColor: 0x5865f2,
+    accentColor: null,
     pageSize: 8,
     ephemeral: true,
     interactionTimeout: 5 * 60 * 1000,

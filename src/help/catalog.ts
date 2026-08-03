@@ -2,10 +2,10 @@ import { distance } from "fastest-levenshtein";
 import { getEffectiveCommandAccess } from "../manager/access";
 import type { CommandGroup } from "../manager/command";
 import {
+    type CommandRoute,
     createRouteKey,
     createRouteLookupKeys,
     createRoutePrefixLookupKeys,
-    type CommandRoute,
 } from "../manager/route";
 
 export interface HelpCommandTarget {
