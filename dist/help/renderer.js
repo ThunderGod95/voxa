@@ -1,6 +1,6 @@
-import { ButtonStyle, MessageFlags, SeparatorSpacingSize, } from "discord.js";
+import { ButtonStyle, inlineCode, MessageFlags, quote, SeparatorSpacingSize, } from "discord.js";
 import { component } from "../components";
-import { escapeInlineCode, formatAccess, formatAliases, formatArgumentEntries, formatCommandPath, formatMessageDefaultUsage, formatMessageUsage, formatSlashUsage, formatTargetLabel, } from "./format";
+import { escapeInlineCode, formatAccess, formatAliases, formatArgumentEntries, formatCommandPath, formatMessageDefaultUsage, formatMessageUsage, formatTargetLabel, } from "./format";
 function truncate(value, maximumLength) {
     if (value.length <= maximumLength) {
         return value;
@@ -9,7 +9,7 @@ function truncate(value, maximumLength) {
 }
 function formatEntry(target) {
     const count = target.kind === "group"
-        ? ` · ${target.routes.length} command${target.routes.length === 1 ? "" : "s"}`
+        ? ` • ${target.routes.length} command${target.routes.length === 1 ? "" : "s"}`
         : "";
     return [
         `### ${formatTargetLabel(target.path)}`,
@@ -37,30 +37,36 @@ function addNavigation(container, context) {
         return;
     }
     container.actionRow((row) => {
-        row.button({
-            customId: context.ids.previous,
-            label: "Previous",
-            style: ButtonStyle.Secondary,
-            disabled: disabled || page <= 0,
-        });
-        row.button({
-            customId: context.ids.next,
-            label: "Next",
-            style: ButtonStyle.Secondary,
-            disabled: disabled || page >= pageCount - 1,
-        });
-        row.button({
-            customId: context.ids.back,
-            label: "Back",
-            style: ButtonStyle.Secondary,
-            disabled: disabled || !canGoBack,
-        });
-        row.button({
-            customId: context.ids.home,
-            label: "All commands",
-            style: ButtonStyle.Primary,
-            disabled: disabled || context.state.target === null,
-        });
+        if (pageCount > 1) {
+            row.button({
+                customId: context.ids.previous,
+                label: "Previous",
+                style: ButtonStyle.Secondary,
+                disabled: disabled || page <= 0,
+            });
+            row.button({
+                customId: context.ids.next,
+                label: "Next",
+                style: ButtonStyle.Secondary,
+                disabled: disabled || page >= pageCount - 1,
+            });
+        }
+        if (canGoBack) {
+            row.button({
+                customId: context.ids.back,
+                label: "Back",
+                style: ButtonStyle.Secondary,
+                disabled: disabled,
+            });
+        }
+        if (context.state.target !== null) {
+            row.button({
+                customId: context.ids.home,
+                label: "All commands",
+                style: ButtonStyle.Primary,
+                disabled: disabled,
+            });
+        }
         return row;
     });
 }
@@ -70,21 +76,21 @@ function renderOverview(context) {
         container.accentColor(context.options.accentColor);
     }
     container
-        .text(`# ${context.options.title}\n` +
+        .text(`## ${context.options.title}\n` +
         `${context.options.intro}\n\n` +
         `Open an entry below, or use ` +
         `\`${escapeInlineCode(context.prefix)}` +
         `${context.options.name} <command>\` ` +
         "for direct lookup.")
         .separator({
-        spacing: SeparatorSpacingSize.Small,
+        spacing: SeparatorSpacingSize.Large,
         divider: true,
     });
     container.text(context.state.entries.length > 0
         ? context.state.entries.map(formatEntry).join("\n\n")
         : "No commands are currently available.");
     container.separator({
-        spacing: SeparatorSpacingSize.Small,
+        spacing: SeparatorSpacingSize.Large,
         divider: true,
     });
     container.text(`-# Page ${context.state.page + 1} of ` +
@@ -98,18 +104,18 @@ function renderGroup(context, target) {
         container.accentColor(context.options.accentColor);
     }
     container
-        .text(`# ${formatTargetLabel(target.path)}\n` +
+        .text(`## ${formatTargetLabel(target.path)}\n` +
         `${target.description}\n\n` +
         `${target.routes.length} registered command${target.routes.length === 1 ? "" : "s"} in this group.`)
         .separator({
-        spacing: SeparatorSpacingSize.Small,
+        spacing: SeparatorSpacingSize.Large,
         divider: true,
     });
     container.text(context.state.entries.length > 0
         ? context.state.entries.map(formatEntry).join("\n\n")
         : "This command group contains no visible commands.");
     container.separator({
-        spacing: SeparatorSpacingSize.Small,
+        spacing: SeparatorSpacingSize.Large,
         divider: true,
     });
     container.text(`-# Page ${context.state.page + 1} of ` +
@@ -119,60 +125,62 @@ function renderGroup(context, target) {
 }
 function renderCommand(context, target) {
     const route = target.route;
-    const slashUsage = formatSlashUsage(route);
     const defaultUsage = formatMessageDefaultUsage(route, context.prefix);
     const argumentEntries = formatArgumentEntries(route.command.arguments ?? {});
     const argumentPageSize = Math.min(context.options.pageSize, 5);
     const argumentStart = context.state.page * argumentPageSize;
     const visibleArguments = argumentEntries.slice(argumentStart, argumentStart + argumentPageSize);
     const aliases = formatAliases(route);
+    const access = formatAccess(route);
     const container = component.container();
     if (context.options.accentColor !== null) {
         container.accentColor(context.options.accentColor);
     }
+    const headerText = [
+        `## ${formatTargetLabel(route.path)}`,
+        quote(route.command.description),
+        "",
+        aliases,
+    ]
+        .filter((line) => line !== null)
+        .join("\n");
     container
-        .text(`# ${formatTargetLabel(route.path)}\n${route.command.description}`)
+        .text(headerText)
         .separator({
-        spacing: SeparatorSpacingSize.Small,
+        spacing: SeparatorSpacingSize.Large,
         divider: true,
     })
         .text([
-        "## Usage",
-        `**Message:** \`${escapeInlineCode(formatMessageUsage(route, context.prefix))}\``,
+        "### Syntax",
+        inlineCode(formatMessageUsage(route, context.prefix)),
         defaultUsage
             ? `**Message default:** \`${escapeInlineCode(defaultUsage)}\``
             : null,
-        slashUsage
-            ? `**Slash:** \`${escapeInlineCode(slashUsage)}\``
-            : "**Slash:** Not registered",
+        "",
+        `${inlineCode("<>")} required • ${inlineCode("[]")} optional`,
     ]
         .filter((line) => line !== null)
         .join("\n"));
     if (visibleArguments.length > 0) {
         const rangeEnd = argumentStart + visibleArguments.length;
+        let argumentsText = `## Arguments\n${visibleArguments.join("\n\n")}`;
+        if (argumentEntries.length > argumentPageSize) {
+            argumentsText += `\n\n-# Showing ${argumentStart + 1}–${rangeEnd} of ${argumentEntries.length}`;
+        }
         container
             .separator({
-            spacing: SeparatorSpacingSize.Small,
+            spacing: SeparatorSpacingSize.Large,
             divider: true,
         })
-            .text(`## Arguments\n` +
-            `${visibleArguments.join("\n\n")}\n\n` +
-            `-# Showing ${argumentStart + 1}–` +
-            `${rangeEnd} of ${argumentEntries.length}`);
+            .text(argumentsText);
     }
-    container
-        .separator({
-        spacing: SeparatorSpacingSize.Small,
-        divider: true,
-    })
-        .text(`## Access\n${formatAccess(route)}`);
-    if (aliases) {
+    if (access) {
         container
             .separator({
-            spacing: SeparatorSpacingSize.Small,
+            spacing: SeparatorSpacingSize.Large,
             divider: true,
         })
-            .text(`## Prefix aliases\n${aliases}`);
+            .text(access);
     }
     addNavigation(container, context);
     return container;
@@ -187,7 +195,7 @@ export function renderHelpNotFound(options, prefix, requestedPath, suggestions) 
     if (options.accentColor !== null) {
         container.accentColor(options.accentColor);
     }
-    container.text("# Command not found\n" +
+    container.text("## Command not found\n" +
         "No command or command group named " +
         `\`${escapeInlineCode(requestedPath)}\` ` +
         `exists.${suggestionText}\n\n` +

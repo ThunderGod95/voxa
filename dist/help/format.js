@@ -1,6 +1,6 @@
-import { PermissionsBitField } from "discord.js";
-import { describeValueDefinition, formatArgumentUsage, getMessageOptionKind, resolveArgumentChoices, } from "../arguments";
-import { getEffectiveCommandAccess, isSlashRouteEnabled, } from "../manager/access";
+import { inlineCode, PermissionsBitField, } from "discord.js";
+import { describeValueDefinition, formatArgumentUsage, resolveArgumentChoices, } from "../arguments";
+import { getEffectiveCommandAccess } from "../manager/access";
 const MAX_DISPLAYED_CHOICES = 5;
 const MAX_INLINE_VALUE_LENGTH = 40;
 export function escapeInlineCode(value) {
@@ -16,7 +16,7 @@ export function formatCommandPath(path) {
     return path.join(" ");
 }
 export function formatTargetLabel(path) {
-    return `/${formatCommandPath(path)}`;
+    return `${inlineCode(`/${formatCommandPath(path)}`)}`;
 }
 export function formatMessageUsage(route, prefix) {
     const usage = formatArgumentUsage(route.command.arguments ?? {});
@@ -31,17 +31,6 @@ export function formatMessageDefaultUsage(route, prefix) {
     const command = `${prefix}${formatCommandPath(route.path.slice(0, -1))}`;
     return usage ? `${command} ${usage}` : command;
 }
-export function formatSlashUsage(route) {
-    if (!isSlashRouteEnabled(route)) {
-        return null;
-    }
-    const schema = route.command.arguments ?? {};
-    const argumentsUsage = Object.entries(schema)
-        .map(([name, definition]) => definition.required ? `<${name}>` : `[${name}]`)
-        .join(" ");
-    const command = `/${formatCommandPath(route.path)}`;
-    return argumentsUsage ? `${command} ${argumentsUsage}` : command;
-}
 function formatChoiceValues(definition) {
     if ((definition.type !== "string" &&
         definition.type !== "integer" &&
@@ -55,65 +44,65 @@ function formatChoiceValues(definition) {
         const value = truncateInlineValue(String(choice.value));
         return name === value
             ? `\`${escapeInlineCode(value)}\``
-            : `\`${escapeInlineCode(name)}\` → ` +
-                `\`${escapeInlineCode(value)}\``;
+            : `\`${escapeInlineCode(name)}\` (\`${escapeInlineCode(value)}\`)`;
     });
     const remaining = choices.length - visible.length;
-    return [visible.join(", "), remaining > 0 ? `and ${remaining} more` : null]
+    return [visible.join(", "), remaining > 0 ? `(+${remaining} more)` : null]
         .filter((part) => part !== null && part.length > 0)
         .join(" ");
 }
 function formatScalarConstraints(definition) {
-    const constraints = [];
+    const inline = [];
+    const blocks = [];
     switch (definition.type) {
         case "string":
             if (definition.minLength !== undefined) {
-                constraints.push(`minimum ${definition.minLength} characters`);
+                inline.push(`Min length: ${definition.minLength}`);
             }
             if (definition.maxLength !== undefined) {
-                constraints.push(`maximum ${definition.maxLength} characters`);
+                inline.push(`Max length: ${definition.maxLength}`);
             }
             if (definition.aliases !== undefined) {
                 const aliases = Object.entries(definition.aliases)
                     .slice(0, MAX_DISPLAYED_CHOICES)
-                    .map(([alias, value]) => `\`${escapeInlineCode(truncateInlineValue(alias))}\`→\`${escapeInlineCode(truncateInlineValue(value))}\``);
-                constraints.push(`message aliases: ${aliases.join(", ")}`);
+                    .map(([alias, value]) => `\`${escapeInlineCode(truncateInlineValue(alias))}\` (\`${escapeInlineCode(truncateInlineValue(value))}\`)`);
+                blocks.push(`- **Aliases:** ${aliases.join(", ")}`);
             }
             break;
         case "integer":
         case "number":
             if (definition.min !== undefined) {
-                constraints.push(`minimum ${definition.min}`);
+                inline.push(`Min: ${definition.min}`);
             }
             if (definition.max !== undefined) {
-                constraints.push(`maximum ${definition.max}`);
+                inline.push(`Max: ${definition.max}`);
             }
             break;
         case "role":
             if (definition.allowedRoleIds !== undefined) {
-                constraints.push(`${definition.allowedRoleIds.length} allowed role${definition.allowedRoleIds.length === 1 ? "" : "s"}`);
+                inline.push(`${definition.allowedRoleIds.length} allowed role${definition.allowedRoleIds.length === 1 ? "" : "s"}`);
             }
             break;
         case "url":
             if (definition.hostname !== undefined) {
-                constraints.push("restricted hostname");
+                inline.push("Restricted hostname");
             }
             if (definition.protocol !== undefined) {
-                constraints.push("restricted protocol");
+                inline.push("Restricted protocol");
             }
             if (definition.pattern !== undefined) {
-                constraints.push("custom URL pattern");
+                inline.push("Custom URL pattern");
             }
             break;
         case "time":
             if (definition.timezone !== undefined) {
-                constraints.push(`timezone ${definition.timezone}`);
+                inline.push(`Timezone: ${definition.timezone}`);
             }
             if (definition.forwardDate) {
-                constraints.push("prefers future dates");
+                inline.push("Prefers future dates");
             }
             if (definition.strict) {
-                constraints.push("strict parsing");
+                inline.push("Strict parsing");
             }
             break;
         case "boolean":
@@ -124,53 +113,40 @@ function formatScalarConstraints(definition) {
     }
     const choices = formatChoiceValues(definition);
     if (choices) {
-        constraints.push(`choices: ${choices}`);
+        blocks.push(`- **Choices:** ${choices}`);
     }
-    return constraints;
+    return { inline, blocks };
 }
 function formatValueConstraints(definition) {
     if (definition.type !== "union") {
         return formatScalarConstraints(definition);
     }
-    const constraints = definition.variants.flatMap(formatScalarConstraints);
-    return [...new Set(constraints)];
-}
-function formatArgumentSyntax(name, definition) {
-    if (definition.placement === "positional") {
-        return definition.rest ? `${name}…` : name;
-    }
-    const optionKind = getMessageOptionKind(definition.value);
-    const canonical = optionKind === "boolean"
-        ? `${name}:true|false · --${name} · --no-${name}`
-        : `${name}:value · --${name} value`;
-    const aliases = [
-        definition.short
-            ? `-${definition.short}${optionKind === "boolean" ? "" : " value"}`
-            : null,
-        ...definition.longAliases.map((alias) => optionKind === "boolean"
-            ? `${alias}:true|false · --${alias} · --no-${alias}`
-            : `${alias}:value · --${alias} value`),
-    ].filter((alias) => alias !== null);
-    return aliases.length > 0
-        ? `${canonical} · ${aliases.join(" · ")}`
-        : canonical;
+    const constraints = definition.variants.map(formatScalarConstraints);
+    return {
+        inline: [...new Set(constraints.flatMap((c) => c.inline))],
+        blocks: [...new Set(constraints.flatMap((c) => c.blocks))],
+    };
 }
 export function formatArgumentEntries(schema) {
     return Object.entries(schema).map(([name, definition]) => {
+        let typeDescription = describeValueDefinition(definition.value);
+        if (typeDescription.includes("|") && typeDescription.length > 25) {
+            typeDescription = "Multiple options";
+        }
+        const formattedType = typeDescription.charAt(0).toUpperCase() + typeDescription.slice(1);
+        const constraints = formatValueConstraints(definition.value);
         const metadata = [
-            definition.required ? "required" : "optional",
-            definition.placement === "positional"
-                ? "positional"
-                : "named option",
-            describeValueDefinition(definition.value),
-            definition.autocomplete ? "autocomplete" : null,
-            ...formatValueConstraints(definition.value),
+            definition.required ? "**Required**" : "Optional",
+            formattedType,
+            definition.autocomplete ? "Supports autocomplete" : null,
+            ...constraints.inline,
         ].filter((value) => value !== null && value.length > 0);
-        return [
-            `**\`${escapeInlineCode(name)}\`** — ` + definition.description,
-            `- Syntax: \`${escapeInlineCode(formatArgumentSyntax(name, definition))}\``,
-            `- ${metadata.join(" · ")}`,
-        ].join("\n");
+        const lines = [
+            `**\`${escapeInlineCode(name)}\`** — ${definition.description}`,
+            `- ${metadata.join(" • ")}`,
+            ...constraints.blocks,
+        ];
+        return lines.join("\n");
     });
 }
 function formatPermissions(permissions) {
@@ -182,47 +158,28 @@ function formatPermissions(permissions) {
 }
 export function formatAccess(route) {
     const access = getEffectiveCommandAccess(route);
-    const availability = [
-        isSlashRouteEnabled(route) ? "slash" : null,
-        "message",
-    ].filter((value) => value !== null);
-    const lines = [
-        `**Available through:** ${availability.join(" and ")} commands`,
-    ];
-    if (access.guildOnly) {
-        lines.push("**Context:** Server only");
-    }
-    else {
-        lines.push("**Context:** Servers and direct messages");
-    }
+    const lines = [];
     if (access.devOnly) {
         lines.push("**Visibility:** Bot developers only");
     }
     const userPermissions = formatPermissions(access.userPermissions);
     if (userPermissions) {
-        lines.push(`**User permissions:** ${userPermissions}`);
+        lines.push(`**Required permissions:** ${userPermissions}`);
     }
-    const botPermissions = formatPermissions(access.botPermissions);
-    if (botPermissions) {
-        lines.push(`**Bot permissions:** ${botPermissions}`);
-    }
-    return lines.join("\n");
+    return lines.length > 0 ? `### Access\n\n${lines.join("\n")}` : null;
 }
 export function formatAliases(route) {
-    const parts = [];
-    for (const [index, group] of (route.groups ?? []).entries()) {
-        if (!group.aliases || group.aliases.length === 0) {
-            continue;
+    const allAliases = [];
+    for (const group of route.groups ?? []) {
+        if (group.aliases && group.aliases.length > 0) {
+            allAliases.push(...group.aliases.map((alias) => `\`${escapeInlineCode(alias)}\``));
         }
-        parts.push(`**${route.path[index]}:** ${group.aliases
-            .map((alias) => `\`${escapeInlineCode(alias)}\``)
-            .join(", ")}`);
     }
     if (route.command.aliases && route.command.aliases.length > 0) {
-        parts.push(`**${route.command.name}:** ${route.command.aliases
-            .map((alias) => `\`${escapeInlineCode(alias)}\``)
-            .join(", ")}`);
+        allAliases.push(...route.command.aliases.map((alias) => `\`${escapeInlineCode(alias)}\``));
     }
-    return parts.length > 0 ? parts.join("\n") : null;
+    return allAliases.length > 0
+        ? `**Aliases:** ${allAliases.join(", ")}`
+        : null;
 }
 //# sourceMappingURL=format.js.map
