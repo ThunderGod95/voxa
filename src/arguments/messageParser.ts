@@ -1,15 +1,38 @@
-import type { Message } from "discord.js";
-import { getRoleFromInput, getUserFromInput } from "../resolvers";
-import { parseMessageSyntax } from "./messageSyntax";
+import {
+	ArgumentStream,
+	Lexer,
+	Parser,
+	type ParserResult,
+	PrefixedStrategy,
+} from "@sapphire/lexure";
+import { inlineCode, type Message } from "discord.js";
+import { getRoleFromInput, getUserFromInput } from "@/resolvers";
 import type {
 	ArgumentParseResult,
 	ArgumentSchema,
 	ArgumentValueDefinition,
+	NamedOptionDefinition,
 	ParsedArguments,
 	ResolutionResult,
 	ScalarValueDefinition,
 } from "./types";
-import { describeValueDefinition } from "./value";
+import { describeValueDefinition, isMessageFlagValueDefinition } from "./value";
+
+const messageLexer = new Lexer({
+	quotes: [
+		['"', '"'],
+		["'", "'"],
+		["“", "”"],
+		["「", "」"],
+		["«", "»"],
+	],
+});
+
+const messageParser = new Parser(new PrefixedStrategy(["--", "/"], ["=", ":"]));
+
+function createArgumentStream(input: string): ArgumentStream {
+	return new ArgumentStream(messageParser.run(messageLexer.run(input.trim())));
+}
 
 function requiresStringInput(
 	name: string,
@@ -25,13 +48,10 @@ function requiresStringInput(
 	return {
 		success: false,
 		code: "INVALID_ARGUMENT",
-		message: `\`${name}\` expects a textual value.`,
+		message: `${inlineCode(name)} expects a textual value.`,
 	};
 }
 
-/**
- * Resolves one scalar message-command value.
- */
 async function resolveScalarMessageValue(
 	name: string,
 	definition: ScalarValueDefinition,
@@ -175,9 +195,6 @@ async function resolveScalarMessageValue(
 	};
 }
 
-/**
- * Resolves a semantic value, including heterogeneous unions.
- */
 async function resolveMessageValue(
 	name: string,
 	definition: ArgumentValueDefinition,
@@ -204,9 +221,7 @@ async function resolveMessageValue(
 	return {
 		success: false,
 		code: "INVALID_ARGUMENT",
-		message:
-			`\`${name}\` must match one of: ` +
-			`${describeValueDefinition(definition)}.`,
+		message: `${inlineCode(name)} must match one of ${describeValueDefinition(definition)}`,
 	};
 }
 
@@ -216,26 +231,190 @@ function missingArgument(name: string): ArgumentParseResult<never> {
 		error: {
 			code: "MISSING_ARGUMENT",
 			argument: name,
-			message: `Missing required argument: \`${name}\`.`,
+			message: `Missing required argument: ${inlineCode(name)}.`,
 		},
+	};
+}
+
+function getMessageOptionKeys(
+	name: string,
+	definition: NamedOptionDefinition,
+): readonly string[] {
+	return [name, ...definition.aliases];
+}
+
+/**
+ * Returns every unordered option/flag name accepted by this command.
+ *
+ * Lexure deliberately parses unordered syntax independently of the command
+ * schema, so we validate the resulting names against Voxa's schema afterward.
+ */
+function getKnownMessageOptionKeys(
+	schema: ArgumentSchema,
+): ReadonlySet<string> {
+	const keys = new Set<string>();
+
+	for (const [name, definition] of Object.entries(schema)) {
+		if (definition.placement !== "option") {
+			continue;
+		}
+
+		for (const key of getMessageOptionKeys(name, definition)) {
+			keys.add(key);
+		}
+	}
+
+	return keys;
+}
+
+/**
+ * Rejects flags/options that Lexure recognized syntactically but that are not
+ * declared by this command.
+ */
+function validateUnorderedArguments(
+	schema: ArgumentSchema,
+	results: ParserResult,
+): ArgumentParseResult<void> {
+	const knownKeys = getKnownMessageOptionKeys(schema);
+
+	for (const key of results.flags) {
+		if (knownKeys.has(key)) {
+			continue;
+		}
+
+		return {
+			success: false,
+			error: {
+				code: "INVALID_SYNTAX",
+				message: `Unknown option: ${inlineCode(`--${key}`)}.`,
+			},
+		};
+	}
+
+	for (const key of results.options.keys()) {
+		if (knownKeys.has(key)) {
+			continue;
+		}
+
+		return {
+			success: false,
+			error: {
+				code: "INVALID_SYNTAX",
+				message: `Unknown option: ${inlineCode(`--${key}`)}.`,
+			},
+		};
+	}
+
+	return {
+		success: true,
+		value: undefined,
+	};
+}
+
+/**
+ * Reads one named Voxa option from Lexure's unordered parse result.
+ */
+function readNamedInput(
+	name: string,
+	definition: NamedOptionDefinition,
+	results: ParserResult,
+): ArgumentParseResult<string | boolean | undefined> {
+	const keys = getMessageOptionKeys(name, definition);
+
+	let flagCount = 0;
+	let optionCount = 0;
+	let optionValue: string | undefined;
+
+	for (const key of keys) {
+		if (results.flags.has(key)) {
+			flagCount++;
+		}
+
+		const values = results.options.get(key);
+
+		if (values === undefined) {
+			continue;
+		}
+
+		optionCount += values.length;
+
+		if (values.length > 0) {
+			optionValue = values[values.length - 1];
+		}
+	}
+
+	const occurrenceCount = flagCount + optionCount;
+
+	if (occurrenceCount === 0) {
+		return {
+			success: true,
+			value: undefined,
+		};
+	}
+
+	if (occurrenceCount > 1) {
+		return {
+			success: false,
+			error: {
+				code: "DUPLICATE_OPTION",
+				argument: name,
+				message: `Option \`${name}\` was provided more than once.`,
+			},
+		};
+	}
+
+	if (flagCount === 1) {
+		if (!isMessageFlagValueDefinition(definition.value)) {
+			return {
+				success: false,
+				error: {
+					code: "INVALID_SYNTAX",
+					argument: name,
+					message: `Option \`--${name}\` requires a value.`,
+				},
+			};
+		}
+
+		return {
+			success: true,
+			value: true,
+		};
+	}
+
+	if (optionValue === undefined) {
+		return {
+			success: false,
+			error: {
+				code: "INVALID_SYNTAX",
+				argument: name,
+				message: `Option \`--${name}\` requires a value.`,
+			},
+		};
+	}
+
+	return {
+		success: true,
+		value: optionValue,
 	};
 }
 
 /**
  * Parses and resolves message-command arguments.
- *
- * CLI grammar is handled by messageSyntax.ts. This layer only maps raw
- * positionals/options onto their semantic Voxa value definitions.
  */
 export async function parseMessageArguments<Schema extends ArgumentSchema>(
 	schema: Schema,
 	message: Message,
-	tokens: readonly string[],
+	input: string,
 ): Promise<ArgumentParseResult<ParsedArguments<Schema>>> {
-	const syntax = parseMessageSyntax(schema, tokens);
+	const stream = createArgumentStream(input);
 
-	if (!syntax.success) {
-		return syntax;
+	const unorderedValidation = validateUnorderedArguments(
+		schema,
+		stream.results,
+	);
+
+	if (!unorderedValidation.success) {
+		return unorderedValidation;
 	}
 
 	const parsed: Record<string, unknown> = {};
@@ -249,26 +428,20 @@ export async function parseMessageArguments<Schema extends ArgumentSchema>(
 		] => entry[1].placement === "positional",
 	);
 
-	let positionalIndex = 0;
-
 	for (const [name, definition] of positionalDefinitions) {
-		let input: string | undefined;
+		let inputValue: string | undefined;
 
 		if (definition.rest) {
-			if (positionalIndex < syntax.value.positionals.length) {
-				input = syntax.value.positionals.slice(positionalIndex).join(" ");
-			}
+			const remaining = stream.many().unwrapOr([]);
 
-			positionalIndex = syntax.value.positionals.length;
+			if (remaining.length > 0) {
+				inputValue = remaining.map((parameter) => parameter.value).join(" ");
+			}
 		} else {
-			input = syntax.value.positionals[positionalIndex];
-
-			if (input !== undefined) {
-				positionalIndex++;
-			}
+			inputValue = stream.single().unwrapOr(undefined);
 		}
 
-		if (input === undefined) {
+		if (inputValue === undefined) {
 			if (definition.required) {
 				return missingArgument(name);
 			}
@@ -280,7 +453,7 @@ export async function parseMessageArguments<Schema extends ArgumentSchema>(
 		const resolved = await resolveMessageValue(
 			name,
 			definition.value,
-			input,
+			inputValue,
 			message,
 		);
 
@@ -298,7 +471,7 @@ export async function parseMessageArguments<Schema extends ArgumentSchema>(
 		parsed[name] = resolved.value;
 	}
 
-	if (positionalIndex < syntax.value.positionals.length) {
+	if (!stream.finished) {
 		return {
 			success: false,
 			error: {
@@ -313,9 +486,13 @@ export async function parseMessageArguments<Schema extends ArgumentSchema>(
 			continue;
 		}
 
-		const input = syntax.value.options[name];
+		const inputValue = readNamedInput(name, definition, stream.results);
 
-		if (input === undefined) {
+		if (!inputValue.success) {
+			return inputValue;
+		}
+
+		if (inputValue.value === undefined) {
 			if (definition.required) {
 				return missingArgument(name);
 			}
@@ -327,7 +504,7 @@ export async function parseMessageArguments<Schema extends ArgumentSchema>(
 		const resolved = await resolveMessageValue(
 			name,
 			definition.value,
-			input,
+			inputValue.value,
 			message,
 		);
 

@@ -453,23 +453,23 @@ export function getSlashValueDefinition(
 }
 
 /**
- * Returns the primitive syntax required by `util.parseArgs`.
+ * Returns whether a message-command value may be represented as a bare Lexure
+ * flag.
  *
- * A union is represented as a boolean flag only when every possible variant
- * is boolean. Any union containing a value-consuming type is represented as a
- * string option, allowing semantic resolution to happen afterward.
+ * Heterogeneous unions require explicit values. A union is flag-compatible
+ * only when every possible variant is boolean.
  */
-export function getMessageOptionKind(
+export function isMessageFlagValueDefinition(
 	definition: ArgumentValueDefinition,
-): "string" | "boolean" {
+): boolean {
 	if (definition.type !== "union") {
-		return definition.type === "boolean" ? "boolean" : "string";
+		return definition.type === "boolean";
 	}
 
-	return definition.variants.length > 0 &&
+	return (
+		definition.variants.length > 0 &&
 		definition.variants.every((variant) => variant.type === "boolean")
-		? "boolean"
-		: "string";
+	);
 }
 
 /**

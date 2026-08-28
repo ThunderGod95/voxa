@@ -102,8 +102,7 @@ function createNamedDefinition<
 		placement: "option",
 		description: options.description,
 		required: resolveRequired(options.required),
-		short: options.short,
-		longAliases: options.longAliases ?? [],
+		aliases: options.aliases ?? [],
 		value: valueDefinition,
 		autocomplete: options.autocomplete,
 	};
@@ -267,8 +266,13 @@ export const argument = {
 /**
  * Factory for named message-command options.
  *
- * Named options support the preferred `name:value` syntax and GNU-style
- * `--name value`, `--name=value`, and short aliases.
+ * Message commands use unordered syntax:
+ *
+ * --name=value
+ *
+ * Boolean values may additionally be supplied as bare flags:
+ *
+ * --silent
  */
 export const option = {
 	/** Constructs a named string option. */

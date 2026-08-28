@@ -1,0 +1,61 @@
+{
+    "lsp": {
+        "typescript-ls": {
+            "settings": {
+                "package_version": "7.0.2"
+            }
+        }
+    },
+
+    "languages": {
+        "JavaScript": {
+            "language_servers": [
+                "biome",
+                "typescript-ls",
+                "!vtsls",
+                "!typescript-language-server"
+            ],
+            "formatter": {
+                "language_server": {
+                    "name": "biome"
+                }
+            },
+            "format_on_save": "on"
+        },
+
+        "TypeScript": {
+            "language_servers": [
+                "biome",
+                "typescript-ls",
+                "!vtsls",
+                "!typescript-language-server"
+            ],
+            "formatter": {
+                "language_server": {
+                    "name": "biome"
+                }
+            },
+            "format_on_save": "on"
+        },
+
+        "JSON": {
+            "formatter": {
+                "language_server": {
+                    "name": "biome"
+                }
+            },
+            "format_on_save": "on",
+            "tab_size": 4
+        },
+
+        "CSS": {
+            "formatter": {
+                "language_server": {
+                    "name": "biome"
+                }
+            },
+            "format_on_save": "on",
+            "tab_size": 4
+        }
+    }
+}

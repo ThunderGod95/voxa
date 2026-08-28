@@ -274,33 +274,18 @@ export interface PositionalInputOptions<Required extends boolean>
 export interface NamedInputOptions<Required extends boolean>
 	extends BaseInputOptions<Required> {
 	/**
-	 * Optional one-character GNU-style alias.
+	 * Additional names accepted by message commands.
 	 *
 	 * Example:
 	 *
-	 * short: "a"
+	 * aliases: ["a", "xp"]
 	 *
 	 * permits:
 	 *
-	 * -a 500
+	 * --a=500
+	 * --xp=500
 	 */
-	short?: string;
-
-	/**
-	 * Additional long names accepted by message commands.
-	 *
-	 * Example:
-	 *
-	 * longAliases: ["xp"]
-	 *
-	 * permits:
-	 *
-	 * xp:500
-	 * --xp 500
-	 *
-	 * Slash commands always use the canonical schema key.
-	 */
-	longAliases?: readonly string[];
+	aliases?: readonly string[];
 }
 
 /**
@@ -328,8 +313,7 @@ export interface NamedOptionDefinition<
 	placement: "option";
 	description: string;
 	required: Required;
-	short?: string;
-	longAliases: readonly string[];
+	aliases: readonly string[];
 	value: Value;
 	autocomplete?: ArgumentAutocompleteHandler;
 }
@@ -787,16 +771,6 @@ export type ArgumentParseResult<Value> =
 	| {
 			success: true;
 			value: Value;
-	  }
-	| {
-			success: false;
-			error: ArgumentParseError;
-	  };
-
-export type TokenizeResult =
-	| {
-			success: true;
-			tokens: string[];
 	  }
 	| {
 			success: false;

@@ -1,39 +1,40 @@
 {
-    "name": "voxa",
-    "version": "0.6.1",
-    "type": "module",
-    "private": true,
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-        ".": {
-            "types": "./dist/index.d.ts",
-            "import": "./dist/index.js"
-        }
-    },
-    "files": [
-        "dist"
-    ],
-    "scripts": {
-        "dev": "tsc -p tsconfig.build.json --watch",
-        "build": "tsc -p tsconfig.build.json",
-        "test": "bun test",
-        "check": "biome check src tests",
-        "format": "biome format --write src tests",
-        "lint": "biome lint --write src tests"
-    },
-    "devDependencies": {
-        "@biomejs/biome": "latest",
-        "@types/bun": "latest"
-    },
-    "peerDependencies": {
-        "discord.js": "^14.27.0",
-        "typescript": "^5"
-    },
-    "dependencies": {
-        "chrono-node": "^2.10.1",
-        "fastest-levenshtein": "^1.0.16",
-        "moment-timezone": "^0.6.3",
-        "zod": "^4.4.3"
-    }
+	"name": "voxa",
+	"version": "0.6.1",
+	"type": "module",
+	"private": true,
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"dev": "tsc -p tsconfig.build.json --watch",
+		"build": "tsc -p tsconfig.build.json",
+		"test": "bun test",
+		"check": "biome check src tests",
+		"format": "biome format --write src tests",
+		"lint": "biome lint --write src tests"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "latest",
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"discord.js": "^14.27.0",
+		"typescript": "^7.0.2"
+	},
+	"dependencies": {
+		"@sapphire/lexure": "^1.1.12",
+		"chrono-node": "^2.10.1",
+		"fastest-levenshtein": "^1.0.16",
+		"moment-timezone": "^0.6.3",
+		"zod": "^4.4.3"
+	}
 }

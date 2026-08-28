@@ -15,10 +15,10 @@ import {
 	describeValueDefinition,
 	getSlashValueDefinition,
 	isAutocompletableValueDefinition,
+	isMessageFlagValueDefinition,
 } from "./value";
 
 const ARGUMENT_NAME_PATTERN = /^[a-z0-9_-]{1,32}$/u;
-const SHORT_OPTION_PATTERN = /^[a-zA-Z0-9]$/u;
 
 type ChoiceValueDefinition =
 	| StringValueDefinition
@@ -420,27 +420,19 @@ function validateValueDefinition(
 	}
 }
 
-function validateNamedOptionNames(
+function validateNamedOptionAliases(
 	commandName: string,
 	schema: ArgumentSchema,
 ): void {
 	const schemaNames = new Set(Object.keys(schema));
-	const longNames = new Map<string, string>();
-	const shortNames = new Map<string, string>();
+	const optionNames = new Map<string, string>();
 
 	for (const [name, definition] of Object.entries(schema)) {
 		if (definition.placement !== "option") {
 			continue;
 		}
 
-		if (name.startsWith("no-")) {
-			throw new Error(
-				`Named option "${name}" in command "${commandName}" ` +
-					'cannot begin with reserved prefix "no-".',
-			);
-		}
-
-		longNames.set(name, name);
+		optionNames.set(name, name);
 	}
 
 	for (const [name, definition] of Object.entries(schema)) {
@@ -448,43 +440,13 @@ function validateNamedOptionNames(
 			continue;
 		}
 
-		if (definition.short !== undefined) {
-			if (!SHORT_OPTION_PATTERN.test(definition.short)) {
-				throw new Error(
-					`Short option "${definition.short}" for ` +
-						`"${name}" in command "${commandName}" must ` +
-						"be exactly one letter or number.",
-				);
-			}
-
-			const existing = shortNames.get(definition.short);
-
-			if (existing !== undefined) {
-				throw new Error(
-					`Short option "-${definition.short}" is used by ` +
-						`both "${existing}" and "${name}" in command ` +
-						`"${commandName}".`,
-				);
-			}
-
-			shortNames.set(definition.short, name);
-		}
-
-		for (const alias of definition.longAliases) {
+		for (const alias of definition.aliases) {
 			if (!ARGUMENT_NAME_PATTERN.test(alias)) {
 				throw new Error(
-					`Long alias "${alias}" for option "${name}" in ` +
+					`Alias "${alias}" for option "${name}" in ` +
 						`command "${commandName}" must contain only ` +
 						"lowercase letters, numbers, hyphens, or " +
 						"underscores and must be 1 to 32 characters long.",
-				);
-			}
-
-			if (alias.startsWith("no-")) {
-				throw new Error(
-					`Long alias "${alias}" for option "${name}" in ` +
-						`command "${commandName}" cannot begin with ` +
-						'the reserved prefix "no-".',
 				);
 			}
 
@@ -497,23 +459,30 @@ function validateNamedOptionNames(
 
 			if (schemaNames.has(alias)) {
 				throw new Error(
-					`Long alias "${alias}" for option "${name}" in ` +
+					`Alias "${alias}" for option "${name}" in ` +
 						`command "${commandName}" conflicts with an ` +
 						"argument name.",
 				);
 			}
 
-			const existing = longNames.get(alias);
+			const existing = optionNames.get(alias);
 
 			if (existing !== undefined) {
+				if (existing === name) {
+					throw new Error(
+						`Option "${name}" in command "${commandName}" ` +
+							`lists alias "${alias}" more than once.`,
+					);
+				}
+
 				throw new Error(
-					`Long option name "${alias}" is used by both ` +
+					`Message option name "${alias}" is used by both ` +
 						`"${existing}" and "${name}" in command ` +
 						`"${commandName}".`,
 				);
 			}
 
-			longNames.set(alias, name);
+			optionNames.set(alias, name);
 		}
 	}
 }
@@ -584,7 +553,7 @@ export function validateArgumentSchema(
 		}
 	}
 
-	validateNamedOptionNames(commandName, schema);
+	validateNamedOptionAliases(commandName, schema);
 }
 
 /**
@@ -592,7 +561,7 @@ export function validateArgumentSchema(
  *
  * Example:
  *
- * <user> amount:<integer> [reason:<string>] [silent:<boolean>]
+ * <user> --amount=<integer> [--reason=<string>] [--silent[=<boolean>]]
  */
 export function formatArgumentUsage(schema: ArgumentSchema): string {
 	return Object.entries(schema)
@@ -605,7 +574,9 @@ export function formatArgumentUsage(schema: ArgumentSchema): string {
 				return definition.required ? `<${label}>` : `[${label}]`;
 			}
 
-			const label = `${name}:<${valueLabel}>`;
+			const label = isMessageFlagValueDefinition(definition.value)
+				? `--${name}[=<${valueLabel}>]`
+				: `--${name}=<${valueLabel}>`;
 
 			return definition.required ? label : `[${label}]`;
 		})
