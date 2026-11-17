@@ -18,9 +18,10 @@
 		"dev": "tsc -p tsconfig.build.json --watch",
 		"build": "tsc -p tsconfig.build.json",
 		"test": "bun test",
-		"check": "biome check src tests",
-		"format": "biome format --write src tests",
-		"lint": "biome lint --write src tests"
+		"check": "biome check src",
+		"format": "biome format --write src",
+		"lint": "biome lint --write src",
+		"typecheck": "tsc --noEmit"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "latest",
