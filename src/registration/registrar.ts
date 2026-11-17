@@ -249,8 +249,8 @@ async function mapConcurrent<Input, Output>(
 function createRegistrationClient(
 	config: SlashCommandRegistrarConfig,
 ): SlashCommandRegistrationClient {
-	if ("transport" in config && config.transport) {
-		return config.transport;
+	if ("client" in config && config.client) {
+		return config.client;
 	}
 
 	if ("rest" in config && config.rest) {

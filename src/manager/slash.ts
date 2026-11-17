@@ -1,4 +1,5 @@
 import {
+	ApplicationIntegrationType,
 	InteractionContextType,
 	type PermissionResolvable,
 	PermissionsBitField,
@@ -42,7 +43,9 @@ function applyRootCommandSettings(
 	userPermissions: readonly PermissionResolvable[],
 ): void {
 	if (guildOnly) {
-		builder.setContexts(InteractionContextType.Guild);
+		builder
+			.setContexts(InteractionContextType.Guild)
+			.setIntegrationTypes(ApplicationIntegrationType.GuildInstall);
 	}
 
 	if (userPermissions.length > 0) {
